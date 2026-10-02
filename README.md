@@ -4,13 +4,17 @@
 [![license](https://img.shields.io/github/license/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/blob/main/LICENSE)
 [![release](https://img.shields.io/github/v/release/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/releases)
 
-给 DeepSeek Harness Web GUI 加三件事：
+给 **DeepSeek Harness Desktop（内置 Web GUI）** 加三件事：
 
 1. **文字中插图** —— 粘贴图片时，在**光标处**插入一个内联胶囊 `[图标] image-1.png`，图片本身仍按官方管线作为附件随本条消息一起发出（模型照样收到图）。
 2. **悬浮预览** —— 鼠标停在**这个名字上**（输入框里的内联胶囊、已发送气泡里的同名文字）弹出缩略图预览卡，带尺寸与体积；移开即收，Esc 也收。
 3. **自动编号** —— 名字自动编排：`image-1.png`、`image-2.png` ……，按媒体大类分前缀、扩展名跟真实 MIME 走，为 mp3 / pdf 等未来类型预留。
 
 ## 安装
+
+> 客户端半边只用 Web 客户端 API（`conversation` / `sessions` / `uiSession` / `inputTriggers`）和 DOM，
+> 没有依赖桌面专属桥（如 Electron preload 注入的 `__DSH_HOST_PATHS__`），
+> 所以 **DSH Desktop 与 `dsh web`（浏览器）下同样可用**。
 
 **方式一：克隆到本地，用仓库里的脚本（本机实测过）**
 
