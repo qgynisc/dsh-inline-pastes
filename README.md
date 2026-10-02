@@ -4,7 +4,7 @@
 [![license](https://img.shields.io/github/license/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/blob/main/LICENSE)
 [![release](https://img.shields.io/github/v/release/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/releases)
 
-给 DeepSeek Harness Web GUI 加三件事（对齐 WorkBuddy 的「文字中插图」）：
+给 DeepSeek Harness Web GUI 加三件事：
 
 1. **文字中插图** —— 粘贴图片时，在**光标处**插入一个内联胶囊 `[图标] image-1.png`，图片本身仍按官方管线作为附件随本条消息一起发出（模型照样收到图）。
 2. **悬浮预览** —— 鼠标停在**这个名字上**（输入框里的内联胶囊、已发送气泡里的同名文字）弹出缩略图预览卡，带尺寸与体积；移开即收，Esc 也收。
