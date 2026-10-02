@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh-inline-pastes harness</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        font: 14px/22px -apple-system, sans-serif;
+      }
+      #transcript {
+        height: 220px;
+        overflow: auto;
+        border: 1px solid #ccc;
+        padding: 8px;
+        margin-bottom: 16px;
+      }
+      #composer {
+        border: 1px solid #999;
+        border-radius: 10px;
+        padding: 8px;
+        min-height: 60px;
+      }
+      #editor {
+        min-height: 40px;
+        outline: none;
+        white-space: pre-wrap;
+      }
+      [data-composer-chip] {
+        background: #e8efff;
+        border-radius: 6px;
+        padding: 1px 6px;
+        color: #2b5cd9;
+      }
+      #results {
+        margin-top: 16px;
+        font: 12px/18px ui-monospace, monospace;
+      }
+      .ok::before {
+        content: '✔ ';
+        color: #1a7f37;
+      }
+      .fail::before {
+        content: '✘ ';
+        color: #d1242f;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- 模拟官方会话滚动区（名字出现在已发送气泡里时要能悬浮预览） -->
+    <div data-conversation-scroll id="transcript">
+      <div id="bubble"></div>
+    </div>
+
+    <!-- 模拟官方 composer：data-input-scroll + contenteditable -->
+    <div data-input-scroll id="composer">
+      <div id="editor" contenteditable="true" data-phase="plain"></div>
+    </div>
+
+    <div id="results" data-status="pending"></div>
+
+    <script>
+      /* 官方 web shell 的模块装载器形态 */
+      window.__ModuleLoader__ = {
+        load(mod) {
+          window.__pluginModule = mod
+        },
+      }
+    </script>
+    <script src="/lib/client.js"></script>
+    <script src="/tests/harness/drive.js"></script>
+  </body>
+</html>

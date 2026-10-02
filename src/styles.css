@@ -1,0 +1,93 @@
+/* dsh-inline-pastes — 悬浮预览卡 + 内联胶囊的样式。
+ *
+ * 全部使用 DSH 主题令牌（--dsw-*），并给出回退值，保证在主题缺失时仍可读。
+ * z-index 取 2147483000：高于普通面板，低于 dsh-drag-and-drop 的全屏遮罩
+ * （2147483647），不会盖住拖拽提示。
+ */
+
+.dsh-ip-card {
+  position: fixed;
+  z-index: 2147483000;
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+  max-width: 376px;
+  padding: 8px;
+  border-radius: var(--dsw-radius-panel, 12px);
+  background: var(--dsw-specific-input-major, #ffffff);
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
+  box-shadow: var(--dsw-elevation-soft, 0 8px 24px rgba(0, 0, 0, 0.16));
+  pointer-events: none;
+}
+
+.dsh-ip-card[data-open='true'] {
+  display: flex;
+}
+
+.dsh-ip-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 360px;
+  max-height: 420px;
+  border-radius: 8px;
+  background: var(--dsw-alias-fill-tertiary, rgba(0, 0, 0, 0.04));
+}
+
+.dsh-ip-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.dsh-ip-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary, #1a1a1a);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dsh-ip-sub {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary, rgba(0, 0, 0, 0.45));
+  font-variant-numeric: tabular-nums;
+}
+
+/* 内联胶囊：把官方 chip 的 240px 上限放宽一点，长名字不至于过早省略；
+ * 其余外观完全沿用官方样式（图标 + 名字 + hover 底色）。 */
+[data-composer-chip='inline-paste'] {
+  max-width: 320px;
+}
+
+/* 缩略图角标：dock 的附件轨 + 已发送气泡的图片行。
+ * 挂在缩略图 <button> 内侧左下角（右上角被官方的删除 × 占着），
+ * pointer-events:none 保证不挡"点击放大"。 */
+.dsh-ip-badge {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  z-index: 2;
+  box-sizing: border-box;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 0 0 0.5px rgb(255 255 255 / 28%);
+}

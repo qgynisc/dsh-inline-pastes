@@ -1,0 +1,12 @@
+{
+  "name": "dsh-inline-pastes",
+  "description": "把粘贴的图片作为「名字胶囊」插进文字里，悬浮名字即可预览缩略图",
+  "version": "0.5.0",
+  "entry": {
+    "name": "dsh-inline-pastes",
+    "inject": []
+  },
+  "client": {
+    "platform": "web"
+  }
+}
