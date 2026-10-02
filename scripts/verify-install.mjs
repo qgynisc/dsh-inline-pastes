@@ -11,11 +11,17 @@
  *   6. cordis.patch.yml 的 insert 行 name === 包名（行 id 故意不同，便于识别）；
  *   7. profile 的 dsh.profile.bundles 里包含本包。
  *
- * 用法：node scripts/verify-install.mjs [--profile desktop]
+ * 用法：
+ *   node scripts/verify-install.mjs [--profile desktop]   # 检查本机真 profile
+ *   node scripts/verify-install.mjs --simulate            # 建一个临时假 profile 再检查
+ *
+ * `--simulate` 是给 CI / 干净机器用的：那里没有 ~/.dsh/profiles/<name>，
+ * 所以临时造一个只声明本插件的 profile（package.json + node_modules 软链），
+ * 把同一套解析链走一遍，跑完删掉。
  */
 import { createRequire } from 'node:module'
-import { existsSync, readFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
@@ -27,15 +33,53 @@ const PACKAGE_NAME = OWN_MANIFEST.name
 const args = process.argv.slice(2)
 const profileIndex = args.indexOf('--profile')
 const PROFILE = profileIndex >= 0 ? args[profileIndex + 1] : 'desktop'
+const SIMULATE = args.includes('--simulate')
 const DSH_HOME = process.env.DSH_HOME ?? join(homedir(), '.dsh')
-const PROFILE_DIR = join(DSH_HOME, 'profiles', PROFILE)
-const PROFILE_MANIFEST = join(PROFILE_DIR, 'package.json')
+
+/** 临时假 profile 的根（--simulate 时才有值，结束时删掉）。 */
+let simulatedHome
+let PROFILE_DIR = join(DSH_HOME, 'profiles', PROFILE)
+let PROFILE_MANIFEST = join(PROFILE_DIR, 'package.json')
+
+if (SIMULATE) {
+  simulatedHome = mkdtempSync(join(tmpdir(), 'dsh-inline-pastes-profile-'))
+  PROFILE_DIR = join(simulatedHome, 'profiles', 'simulated')
+  PROFILE_MANIFEST = join(PROFILE_DIR, 'package.json')
+  mkdirSync(join(PROFILE_DIR, 'node_modules'), { recursive: true })
+  writeFileSync(
+    PROFILE_MANIFEST,
+    `${JSON.stringify(
+      {
+        name: 'dsh-profile-simulated',
+        private: true,
+        dsh: { profile: { bundles: [PACKAGE_NAME] } },
+        dependencies: { [PACKAGE_NAME]: `link:${ROOT}` },
+      },
+      null,
+      2,
+    )}\n`,
+  )
+  symlinkSync(ROOT, join(PROFILE_DIR, 'node_modules', PACKAGE_NAME), 'dir')
+  console.log(`（--simulate）临时 profile：${PROFILE_DIR}\n`)
+}
 
 const checks = []
 const check = (name, ok, detail) => checks.push({ name, ok: ok === true, detail: detail === undefined ? '' : String(detail) })
 
+/** 结束前清理临时 profile。 */
+const cleanup = () => {
+  if (simulatedHome === undefined) return
+  try {
+    rmSync(simulatedHome, { recursive: true, force: true })
+  } catch (error) {
+    /* 清不掉不影响结论 */
+  }
+}
+
 if (!existsSync(PROFILE_MANIFEST)) {
   console.error(`✘ 找不到 profile 清单：${PROFILE_MANIFEST}`)
+  console.error('  想在干净机器 / CI 上自检，加 --simulate（会临时造一个假 profile）')
+  cleanup()
   process.exit(1)
 }
 
@@ -114,5 +158,6 @@ for (const item of checks) {
   if (!item.ok) failed += 1
   console.log(`${item.ok ? '✔' : '✘'} ${item.name}${item.detail ? ` — ${item.detail}` : ''}`)
 }
-console.log(`\n安装自检：${checks.length - failed}/${checks.length} 通过（profile=${PROFILE}）`)
+console.log(`\n安装自检：${checks.length - failed}/${checks.length} 通过（profile=${SIMULATE ? 'simulated(临时)' : PROFILE}）`)
+cleanup()
 process.exit(failed === 0 ? 0 : 1)

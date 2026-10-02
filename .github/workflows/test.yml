@@ -1,0 +1,39 @@
+# push / PR 自动验证：构建 + 72 项单测 + 14 项「加载器解析链」自检。
+#
+# 为什么不上浏览器那层（41 项，需要真 Chrome）：那 41 项验的是我们自己写的 DOM 逻辑，
+# 而这里要抓的是两类本机抓不到的问题 ——
+#   ① 跨平台：macOS 文件系统大小写不敏感，Ubuntu 敏感（导入路径写错大小写只有 Linux 会炸）；
+#   ② 跨 Node 版本：package.json 声明 engines >= 20，而开发机只在 26 上跑过。
+# 它**抓不到** "DSH 升级把契约改了" —— 单测用的是假 ctx，不是真 DSH。
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22', '24']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      # 同一条命令本地也能跑：构建 → 单元测试 → 用临时假 profile 走一遍加载器解析链
+      - name: 构建 + 单测 + 安装自检
+        run: npm run test:ci

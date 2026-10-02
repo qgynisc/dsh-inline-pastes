@@ -1,5 +1,7 @@
 # dsh-inline-pastes
 
+[![test](https://github.com/qgynisc/dsh-inline-pastes/actions/workflows/test.yml/badge.svg)](https://github.com/qgynisc/dsh-inline-pastes/actions/workflows/test.yml)
+
 给 DeepSeek Harness Web GUI 加三件事（对齐 WorkBuddy 的「文字中插图」）：
 
 1. **文字中插图** —— 粘贴图片时，在**光标处**插入一个内联胶囊 `[图标] image-1.png`，图片本身仍按官方管线作为附件随本条消息一起发出（模型照样收到图）。
@@ -210,8 +212,10 @@ tests/harness/*           浏览器 harness（假 ctx + 真 ClipboardEvent / ele
 
 ```bash
 npm run build          # → lib/index.js、lib/client.js
-npm test               # 构建 + 38 项单测 + 20 项真 Chrome 端到端
+npm test               # 构建 + 单元测试 + 真 Chrome 端到端（需要本机有 Chrome）
+npm run test:ci        # CI 跑的同一条：构建 + 单测 + 用临时 profile 做加载器解析链自检
 npm run verify:browser # 只跑浏览器层（需要本机 Chrome；可用 --chrome <path> 指定）
+node scripts/verify-install.mjs --simulate   # 干净机器/CI 上没有真 profile 时，临时造一个再自检
 npm run install:desktop   # 装进 desktop profile（当前桌面端用的就是它）
 npm run uninstall:desktop # 卸出
 ```
@@ -227,6 +231,18 @@ npm run uninstall:desktop # 卸出
 - 顺带把「刷新页面后历史消息没有预览」这个 v1 限制也解决了大半——用的是会话授权的持久图片地址，只要那张图已经在气泡里渲染出来就能预览。
 
 只有输入框草稿里的名字（还没发送、没有消息 DOM 可依）才回退到本插件的内存登记表。
+
+## 持续集成
+
+`.github/workflows/test.yml` 在每次 push / PR 跑 **Ubuntu × Node 20/22/24** 三档，执行
+`npm run test:ci`（构建 → 单测 → 临时 profile 的加载器解析链自检）。
+
+它专门盯两类**本机抓不到**的问题：
+
+- **跨平台**：macOS 文件系统大小写不敏感、Ubuntu 敏感 —— 导入路径大小写写错只有 Linux 会炸；
+- **跨 Node 版本**：`package.json` 声明 `engines >= 20`，而开发机只在 Node 26 上跑过。
+
+（它抓不到「DSH 升级改坏了官方契约」—— 单测用的是假 ctx，不是真 DSH；这类只能实测。）
 
 ## 已知限制
 

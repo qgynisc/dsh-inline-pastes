@@ -41,7 +41,8 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node scripts/build.mjs && node tests/run-all.mjs",
-    "test:unit": "node --test tests/unit/",
+    "test:unit": "node --test tests/unit/*.test.mjs",
+    "test:ci": "node scripts/build.mjs && node --test tests/unit/*.test.mjs && node scripts/verify-install.mjs --simulate",
     "verify:browser": "node scripts/verify-browser.mjs",
     "install:desktop": "node scripts/install.mjs --profile desktop",
     "uninstall:desktop": "node scripts/install.mjs --profile desktop --uninstall"
