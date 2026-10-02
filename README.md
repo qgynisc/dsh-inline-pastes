@@ -6,6 +6,31 @@
 2. **悬浮预览** —— 鼠标停在**这个名字上**（输入框里的内联胶囊、已发送气泡里的同名文字）弹出缩略图预览卡，带尺寸与体积；移开即收，Esc 也收。
 3. **自动编号** —— 名字自动编排：`image-1.png`、`image-2.png` ……，按媒体大类分前缀、扩展名跟真实 MIME 走，为 mp3 / pdf 等未来类型预留。
 
+## 安装
+
+**方式一：克隆到本地，用仓库里的脚本（本机实测过）**
+
+```bash
+git clone git@github.com:qgynisc/dsh-inline-pastes.git
+cd dsh-inline-pastes
+npm run build                # 可选：lib/ 已随仓库入库，构建产物就是加载器要的那份
+npm run install:desktop      # 装进 desktop profile（自动备份 package.json / pnpm-lock.yaml）
+# 别的 profile：node scripts/install.mjs --profile web
+```
+
+装完**重启 DeepSeek Harness**（客户端插件要重新加载 bundle 才会生效）。
+
+**方式二：用 DSH 自带的插件安装命令**
+
+```bash
+dsh plugin --profile desktop add git@github.com:qgynisc/dsh-inline-pastes.git
+```
+
+**卸载**：`npm run uninstall:desktop`，或直接删掉 profile 里 `dsh.profile.bundles` 的
+`dsh-inline-pastes` 一行与 `dependencies` 里的对应条目。
+
+**验证装好了没**：重启后浏览器控制台里 `__dshInlinePastes.version` 应等于插件版本号。
+
 ## 实际效果
 
 **① 文字中插图** —— 粘贴图片，胶囊落在光标处，图片照常作为附件随消息一起发出：
