@@ -68,26 +68,236 @@
 
 /* 缩略图角标：dock 的附件轨 + 已发送气泡的图片行。
  * 挂在缩略图 <button> 内侧左下角（右上角被官方的删除 × 占着），
- * pointer-events:none 保证不挡"点击放大"。 */
+ * pointer-events:none 保证不挡"点击放大"。
+ * 尺寸由设置页的「缩略图角标」档位决定（关 / 小 / 中 / 大），见下面的 --sm/--md/--lg。 */
 .dsh-ip-badge {
   position: absolute;
   left: 3px;
   bottom: 3px;
   z-index: 2;
   box-sizing: border-box;
-  min-width: 14px;
-  height: 14px;
   padding: 0 3px;
-  border-radius: 7px;
+  border-radius: 999px;
   background: rgb(0 0 0 / 62%);
   color: #fff;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  font-size: 10px;
   font-weight: 500;
-  line-height: 14px;
   text-align: center;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
   user-select: none;
   box-shadow: 0 0 0 0.5px rgb(255 255 255 / 28%);
+}
+
+/* 小 */
+.dsh-ip-badge--sm {
+  min-width: 12px;
+  height: 12px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+/* 中（默认，与 0.5.x 的表现一致） */
+.dsh-ip-badge--md {
+  min-width: 14px;
+  height: 14px;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* 大 */
+.dsh-ip-badge--lg {
+  min-width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 18px;
+  padding: 0 4px;
+}
+
+/* ---------------------------------------------------------------------------
+ * 设置页（设置 → 混合排版，DSH 的 settings.section 槽）
+ *
+ * 全部用 DSH 主题令牌（--dsw-*）+ 回退值：主题缺失时仍然可读。
+ * 面板只依赖这些类名，不往宿主 DOM 里塞别的节点。
+ * ------------------------------------------------------------------------- */
+
+.dsh-ip-set {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--dsw-radius-panel, 12px);
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
+  background: var(--dsw-specific-input-major, rgba(128, 128, 128, 0.04));
+  color: var(--dsw-alias-label-primary, inherit);
+  font-size: 13px;
+}
+
+.dsh-ip-set-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 8px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
+}
+
+.dsh-ip-set-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dsh-ip-set-sub {
+  color: var(--dsw-alias-label-tertiary, rgba(0, 0, 0, 0.5));
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.dsh-ip-set-sub a {
+  color: var(--dsw-alias-label-link, #2b5cd9);
+  text-decoration: none;
+}
+
+.dsh-ip-set-sub a:hover {
+  text-decoration: underline;
+}
+
+.dsh-ip-set-section {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.12));
+  color: var(--dsw-alias-label-tertiary, rgba(0, 0, 0, 0.5));
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.dsh-ip-set-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.dsh-ip-set-row--toggle {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dsh-ip-set-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: none;
+  width: 132px;
+}
+
+.dsh-ip-set-label {
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.dsh-ip-set-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dsh-ip-set-hint {
+  color: var(--dsw-alias-label-tertiary, rgba(0, 0, 0, 0.5));
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.dsh-ip-set-hint--under {
+  margin-left: 22px;
+}
+
+.dsh-ip-set-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* 带说明的行：说明排在控件下方，跟控件左对齐 */
+.dsh-ip-set-control--stack {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.dsh-ip-set-stack {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dsh-ip-set-select,
+.dsh-ip-set-text {
+  max-width: 220px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.2));
+  background: var(--dsw-specific-input-major, transparent);
+  color: inherit;
+  font-size: 12px;
+}
+
+.dsh-ip-set-btn {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.2));
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dsh-ip-set-warn {
+  color: var(--dsw-alias-label-error, #d1242f);
+  font-size: 12px;
+}
+
+/* 胶囊预览 + 实际发送的名字 + 角标预览 */
+.dsh-ip-set-sample {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--dsw-alias-fill-tertiary, rgba(128, 128, 128, 0.08));
+  font-size: 12px;
+}
+
+.dsh-ip-set-sample-title {
+  color: var(--dsw-alias-label-tertiary, rgba(0, 0, 0, 0.5));
+}
+
+.dsh-ip-set-sample-tail {
+  color: var(--dsw-alias-label-secondary, rgba(0, 0, 0, 0.7));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* 预览用的官方胶囊观感（真胶囊是 DSH 自己渲染的，这里只是示意） */
+.dsh-ip-set-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-secondary, rgba(43, 92, 217, 0.12));
+  color: var(--dsw-alias-label-link, #2b5cd9);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* 角标预览的定位容器（.dsh-ip-badge 是 absolute） */
+.dsh-ip-set-thumb {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--dsw-alias-fill-tertiary, rgba(128, 128, 128, 0.18));
 }

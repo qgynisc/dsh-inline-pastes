@@ -1,0 +1,62 @@
+<!doctype html>
+<!--
+  设置页**离线预览**（给 README 出图、也方便不开 DSH 就看一眼面板长什么样）。
+
+  由 scripts/preview-settings.mjs 起静态服务 + 无头 Chrome 截图 → docs/settings.png。
+  注意：这里用的是 React 替身 + 迷你 DOM 渲染器，不是真 React，也不是真设置外壳，
+  所以只用来示意面板的内容与排版，不代表真机像素。
+-->
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>dsh-inline-pastes — 设置页预览</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #f4f5f7;
+        color: #1a1a1a;
+        font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Segoe UI', sans-serif;
+      }
+      #mount {
+        width: 560px;
+        margin: 0 auto;
+      }
+      /* 模拟设置面板的内容列：白底 + 圆角，跟真机上的卡片观感接近 */
+      #mount > .dsh-ip-set {
+        background: #fff;
+        border-color: rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mount"></div>
+
+    <script>
+      /* 官方 web shell 的模块装载器形态 */
+      window.__ModuleLoader__ = {
+        load(mod) {
+          window.__pluginModule = mod
+        },
+      }
+    </script>
+    <script src="/lib/client.js"></script>
+    <script type="module">
+      import { createReact, render } from '/tests/helpers/react-shim.js'
+      import { toDom } from '/tests/harness/dom-render.js'
+
+      const react = createReact()
+      const mod = window.__pluginModule.factory((name) => {
+        if (name === 'react') return react
+        throw new Error(`预览页不解析平台模块：${name}`)
+      })
+      const Panel = mod.__test.createSettingsPanel(react)
+      const tree = render(react, Panel, { subscribeLocale: () => () => {} })
+      document.getElementById('mount').append(toDom(tree, document))
+      document.title = '设置页预览已就绪'
+      window.__previewReady = true
+    </script>
+  </body>
+</html>

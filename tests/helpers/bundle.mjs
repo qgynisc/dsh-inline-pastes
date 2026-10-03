@@ -15,6 +15,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 /**
  * 加载构建产物。
  * @param options.document - 注入的假 document（缺省不给，插件 apply 会直接返回）。
+ * @param options.require - 注入给 factory 的 require。缺省是「什么都不解析」的实现
+ *   （用来验证拿不到平台模块时插件照常工作）；测设置页时把 React 替身传进来。
  * @returns {id, mod, sandbox}
  */
 export function loadBundle(options = {}) {
@@ -39,8 +41,11 @@ export function loadBundle(options = {}) {
   vm.createContext(sandbox)
   vm.runInContext(code, sandbox, { filename: 'lib/client.js' })
   if (loaded === undefined) throw new Error('bundle 没有调用 window.__ModuleLoader__.load')
-  const mod = loaded.factory(() => {
-    throw new Error('本插件不应解析任何平台模块')
-  })
+  const mod = loaded.factory(
+    options.require ??
+      (() => {
+        throw new Error('本插件不应解析任何平台模块')
+      }),
+  )
   return { id: loaded.id, mod, sandbox }
 }

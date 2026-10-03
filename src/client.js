@@ -40,27 +40,38 @@ const STYLES = /*__STYLES__*/ ''
 const VERSION = /*__VERSION__*/ '0.0.0'
 
 /* ---------------------------------------------------------------------------
- * 0. 配置（改这里就能改行为；未来接音频/文档只影响 prefixes 与接管入口）
+ * 0. 设置（默认值 + 持久化 + 订阅；设置页改的就是这一份）
+ *
+ * 这些键都能在「设置 → 混合排版」里改，改完**立刻生效**并写进 localStorage。
+ * 所以插件各处一律运行时读下面的 `settings`，不要再写死常量。
  * ------------------------------------------------------------------------- */
 
-const CONFIG = {
+/**
+ * 出厂默认值。设置页的「恢复默认设置」就是回到这一份。
+ */
+const DEFAULTS = {
   /** 总开关：false 时插件完全不动 DOM、不接管粘贴。 */
   enabled: true,
   /** 是否接管图片粘贴（关掉就退回官方行为：图片只进附件轨）。 */
   interceptPaste: true,
-  /** 序号从几开始：1 → image-1.png。 */
+  /** 名字悬浮预览卡的总开关。 */
+  hoverPreview: true,
+  /** 序号从几开始：1 → pic-1.png。 */
   startIndex: 1,
   /**
    * 编号范围：
-   *   'message'（默认）—— 每条消息都从 image-1 重开（同一消息内连续排）；
+   *   'message'（默认）—— 每条消息都从 pic-1 重开（同一消息内连续排）；
    *   'session'        —— 整个会话连续排，换消息接着往下排。
    */
   counterScope: 'message',
   /** 悬浮多久（毫秒）才弹预览卡。 */
   hoverDelayMs: 140,
-  /** 各媒体大类的前缀（名字形如 `<prefix>-<n>.<ext>`）。 */
+  /**
+   * 各媒体大类的前缀（名字形如 `<prefix>-<n>.<ext>`）。
+   * 默认 `pic`：比 `image` 短，胶囊里更省地方。
+   */
   prefixes: {
-    image: 'image',
+    image: 'pic',
     audio: 'audio',
     video: 'video',
     pdf: 'pdf',
@@ -69,6 +80,18 @@ const CONFIG = {
     archive: 'zip',
     other: 'file',
   },
+  /**
+   * 胶囊里**显示**成什么：
+   *   'short'（默认）—— 短名 `pic-1`，省空间；
+   *   'full'          —— 完整文件名 `pic-1.png`。
+   * 两种都只影响显示：真正发出去的文本、附件名、模型侧 handle 行始终是完整文件名
+   * （见下面的 codec 与 README 的「短名只是显示别名」一节）。
+   */
+  chipDisplay: 'short',
+  /** 缩略图序号角标大小：'off' | 'sm' | 'md' | 'lg'。 */
+  badgeSize: 'md',
+  /** 角标重扫的最小间隔（毫秒）：MutationObserver 在流式输出时很吵，节流一下。 */
+  badgeScanMinIntervalMs: 80,
   /** 记忆上限：超过就淘汰最早的记录并释放 object URL。 */
   maxRemembered: 600,
   /** 预览卡下方是否显示「宽×高 · 体积」。 */
@@ -77,10 +100,162 @@ const CONFIG = {
   auditBeforeSend: true,
   /** 自检不通过时，第一次回车先拦下来（再按一次仍可发送）。false = 只提示、不拦。 */
   blockOnAuditFailure: true,
-  /** 给 dock / 已发送气泡里的缩略图加序号角标（数字来自缩略图的 alt）。 */
-  badgeThumbnails: true,
-  /** 角标重扫的最小间隔（毫秒）：MutationObserver 在流式输出时很吵，节流一下。 */
-  badgeScanMinIntervalMs: 80,
+  /** 本插件自己那套界面文案的语言：'auto' 跟随 DSH 界面语言 / 'zh' / 'en'。 */
+  lang: 'auto',
+}
+
+/** 设置持久化键（与计数器分开存，恢复默认不会把编号一起清掉）。 */
+const SETTINGS_STORAGE_KEY = 'dsh-inline-pastes:settings:v1'
+
+/** 枚举型设置的合法取值（设置页与校验共用一份）。 */
+const BADGE_SIZES = ['off', 'sm', 'md', 'lg']
+const CHIP_DISPLAYS = ['short', 'full']
+const LANGS = ['auto', 'zh', 'en']
+const COUNTER_SCOPES = ['message', 'session']
+
+/** 前缀合法性：与 prefixFor 的判定一致，设置页拿它做实时校验与回显。 */
+const PREFIX_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,23}$/
+
+/**
+ * 逐键合并：只收已知键，未知键与非法值一律落回默认值。
+ * 目的很实在——localStorage 里的脏数据（改坏的、旧版本留下的）不能把插件带崩。
+ * @param base - 基准（当前值或 DEFAULTS）。
+ * @param patch - 待合并的补丁。
+ * @returns 新的设置对象（不改动入参）。
+ */
+function mergeSettings(base, patch) {
+  const out = { ...base, prefixes: { ...base.prefixes } }
+  if (patch === null || typeof patch !== 'object') return out
+  for (const key of Object.keys(base)) {
+    if (!Object.hasOwn(patch, key)) continue
+    const value = patch[key]
+    if (key === 'prefixes') {
+      if (value === null || typeof value !== 'object') continue
+      for (const category of Object.keys(base.prefixes)) {
+        const candidate = value[category]
+        if (typeof candidate === 'string' && PREFIX_PATTERN.test(candidate)) out.prefixes[category] = candidate
+      }
+      continue
+    }
+    if (key === 'startIndex') {
+      if (Number.isSafeInteger(value) && value >= 0) out[key] = value
+      continue
+    }
+    if (key === 'hoverDelayMs' || key === 'maxRemembered' || key === 'badgeScanMinIntervalMs') {
+      if (Number.isFinite(value) && value >= 0) out[key] = value
+      continue
+    }
+    if (key === 'badgeSize') {
+      if (BADGE_SIZES.includes(value)) out[key] = value
+      continue
+    }
+    if (key === 'chipDisplay') {
+      if (CHIP_DISPLAYS.includes(value)) out[key] = value
+      continue
+    }
+    if (key === 'lang') {
+      if (LANGS.includes(value)) out[key] = value
+      continue
+    }
+    if (key === 'counterScope') {
+      if (COUNTER_SCOPES.includes(value)) out[key] = value
+      continue
+    }
+    if (typeof value === 'boolean') out[key] = value
+  }
+  return out
+}
+
+/** 出厂设置的一份拷贝（避免调用方改到 DEFAULTS.prefixes）。 */
+function defaults() {
+  return mergeSettings(DEFAULTS, DEFAULTS)
+}
+
+/**
+ * 读持久化设置；拿不到、解析失败、值不合法都落回默认值。
+ * @param storage - localStorage 形态对象（单测注入假实现）。
+ */
+function readSettings(storage) {
+  try {
+    const raw = storage?.getItem?.(SETTINGS_STORAGE_KEY)
+    if (typeof raw !== 'string' || raw === '') return defaults()
+    return mergeSettings(DEFAULTS, JSON.parse(raw))
+  } catch (error) {
+    return defaults()
+  }
+}
+
+/**
+ * 活设置对象。
+ *
+ * 引用恒定、原地更新：`createNameBook(settings)` / `createRegistry(settings)` 这类
+ * 「一次创建、长期使用」的组件握着的是同一个引用，原地改字段它们才能立刻读到新值
+ * （设置页改完要马上生效，不能等重启）。
+ */
+const settings = readSettings(browserStorage())
+
+/** 设置变化的订阅者。 */
+const settingsSubscribers = new Set()
+
+/**
+ * 订阅设置变化（返回退订函数）。订阅时**不**立刻回调 —— 需要当前值直接读 `settings`。
+ * @param listener - 回调。
+ */
+function subscribeSettings(listener) {
+  if (typeof listener !== 'function') return () => {}
+  settingsSubscribers.add(listener)
+  return () => settingsSubscribers.delete(listener)
+}
+
+/**
+ * 写设置：合并 → 落盘 → 通知。
+ * @param patch - 局部补丁（只给要改的键）。
+ * @returns 更新后的 settings。
+ */
+function updateSettings(patch) {
+  const merged = mergeSettings(settings, patch)
+  for (const key of Object.keys(merged)) {
+    if (key === 'prefixes') Object.assign(settings.prefixes, merged.prefixes)
+    else settings[key] = merged[key]
+  }
+  try {
+    browserStorage()?.setItem?.(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch (error) {
+    /* 隐私模式 / 配额：改了就好，落盘失败不影响本次会话 */
+  }
+  for (const listener of [...settingsSubscribers]) {
+    try {
+      listener(settings)
+    } catch (error) {
+      /* 单个订阅者出错不影响其它订阅者 */
+    }
+  }
+  return settings
+}
+
+/** 恢复默认设置（只清本插件的设置键，不动编号计数器）。 */
+function resetSettings() {
+  try {
+    browserStorage()?.removeItem?.(SETTINGS_STORAGE_KEY)
+  } catch (error) {
+    /* 忽略 */
+  }
+  return updateSettings(defaults())
+}
+
+/**
+ * 「胶囊里显示的名字」：'short' 时去掉扩展名（pic-1.png → pic-1）。
+ *
+ * 注意这是**纯显示**：ref、附件名、发送文本、模型侧 handle 行都仍是完整文件名。
+ * 悬浮预览按这个名字也能查到登记表（见 createRegistry 的别名索引）。
+ * @param name - 完整文件名。
+ * @param config - 设置对象。
+ */
+function displayNameFor(name, config) {
+  if (typeof name !== 'string') return ''
+  if (config?.chipDisplay === 'full') return name
+  const dot = name.lastIndexOf('.')
+  return dot > 0 ? name.slice(0, dot) : name
 }
 
 /** 胶囊的 source 名：出现在 DOM 的 data-composer-chip 上，也是点击路由的键。 */
@@ -177,7 +352,7 @@ function extensionFor(mime, fileName) {
  * 归类：决定用哪个前缀。MIME 优先，MIME 缺失/泛化时看扩展名。
  * @param mime - 浏览器给的 MIME。
  * @param ext - extensionFor 的结果。
- * @returns CONFIG.prefixes 的键之一。
+ * @returns settings.prefixes 的键之一。
  */
 function categoryOf(mime, ext) {
   const type = typeof mime === 'string' ? mime.toLowerCase() : ''
@@ -536,6 +711,13 @@ function isComposerTarget(doc, target) {
  */
 function createRegistry(config, onGrow) {
   const records = new Map()
+  /**
+   * 短名别名 → 完整文件名。
+   *
+   * 胶囊显示短名（`pic-1`）时，悬浮落在胶囊上读到的是短名，而登记表按完整文件名
+   * （`pic-1.png`，也就是模型侧看到的名字）存。这里建一张别名索引，两种写法都查得到同一张图。
+   */
+  const aliases = new Map()
   const limit = Number.isSafeInteger(config?.maxRemembered) && config.maxRemembered > 0 ? config.maxRemembered : 600
   const revoke = (url) => {
     try {
@@ -544,10 +726,20 @@ function createRegistry(config, onGrow) {
       /* 释放失败不影响功能 */
     }
   }
+  /** 丢掉指向该完整文件名的别名（同名覆盖与淘汰时都要清，避免别名指到已释放的图）。 */
+  const dropAliasesFor = (name) => {
+    for (const [alias, target] of [...aliases]) if (target === name) aliases.delete(alias)
+  }
   return {
     size: () => records.size,
-    has: (name) => records.has(name),
-    get: (name) => records.get(name),
+    has: (name) => records.has(name) || aliases.has(name),
+    /** 取记录：完整文件名与短名别名都认。 */
+    get(name) {
+      const direct = records.get(name)
+      if (direct !== undefined) return direct
+      const real = aliases.get(name)
+      return real === undefined ? undefined : records.get(real)
+    },
     /**
      * 登记一条记录（同名覆盖）。
      * @param entry - { name, sessionId, file, mediaType, bytes }。
@@ -559,6 +751,7 @@ function createRegistry(config, onGrow) {
         records.delete(entry.name)
         revoke(previous.url)
       }
+      dropAliasesFor(entry.name)
       const record = {
         name: entry.name,
         sessionId: entry.sessionId,
@@ -569,19 +762,25 @@ function createRegistry(config, onGrow) {
         height: undefined,
       }
       records.set(entry.name, record)
+      const alias = displayNameFor(entry.name, config)
+      if (alias !== '' && alias !== entry.name) aliases.set(alias, entry.name)
       probeDimensions(record, entry.file, onGrow)
       while (records.size > limit) {
         const oldest = records.keys().next()
         if (oldest.done === true) break
         const victim = records.get(oldest.value)
         records.delete(oldest.value)
-        if (victim !== undefined) revoke(victim.url)
+        if (victim !== undefined) {
+          revoke(victim.url)
+          dropAliasesFor(victim.name)
+        }
       }
       return record
     },
     dispose() {
       for (const record of records.values()) revoke(record.url)
       records.clear()
+      aliases.clear()
     },
   }
 }
@@ -945,10 +1144,18 @@ function auditDraft(chipLabels, attachmentNames) {
   }
 }
 
-/** 从 shell 快照 + conversation 服务里取出自检需要的两个序列。 */
+/**
+ * 从 shell 快照 + conversation 服务里取出自检需要的两个序列。
+ *
+ * 名字取的是**完整文件名**：优先从胶囊的隐藏 ref 还原（`dsh-inline-paste:pic-1.png`），
+ * 拿不到 ref 才退回 label。这一步很关键——胶囊显示的是短名 `pic-1`（见 chipDisplay），
+ * 而附件名是 `pic-1.png`，若拿显示名去比对，自检会把每张图都误报成「找不到对应图片」。
+ */
 function auditInputs(state, conversation) {
   const occurrences = Array.isArray(state?.occurrences) ? state.occurrences : []
-  const chipLabels = occurrences.filter((item) => item?.source === SOURCE).map((item) => item.label ?? '')
+  const chipLabels = occurrences
+    .filter((item) => item?.source === SOURCE)
+    .map((item) => (typeof item?.ref === 'string' && item.ref !== '' ? nameFromRef(item.ref) : item?.label ?? ''))
   const ids = Array.isArray(state?.attachmentIds) ? state.attachmentIds : []
   let attachmentNames = []
   try {
@@ -1007,7 +1214,11 @@ function createAuditor(ctx, deps) {
 
   /** 重算一次；返回 {verdict, draftRev} 或 null（当前没有可自检的会话）。 */
   const evaluate = () => {
-    if (CONFIG.auditBeforeSend !== true) return null
+    if (settings.auditBeforeSend !== true || settings.enabled !== true) {
+      /* 自检被关掉时，把自己之前挂的那条提示一起撤掉，别留个孤儿条 */
+      clearNotice()
+      return null
+    }
     const session = resolveSession(ctx)
     if (session === undefined) {
       shell = null
@@ -1063,7 +1274,7 @@ function installSendGuard(deps) {
   const doc = deps.doc
   const auditor = deps.auditor
   const onKeyDown = (event) => {
-    if (CONFIG.auditBeforeSend !== true || CONFIG.blockOnAuditFailure !== true) return
+    if (settings.auditBeforeSend !== true || settings.blockOnAuditFailure !== true || settings.enabled !== true) return
     if (event.key !== 'Enter' || event.isComposing === true || event.keyCode === 229) return
     if (event.shiftKey === true || event.altKey === true) return
     if (typeof event.getModifierState === 'function' && event.getModifierState('AltGraph')) return
@@ -1133,7 +1344,7 @@ function notePaste(deps, payload) {
  * @returns 是否已接管。
  */
 function handlePaste(ctx, deps, event) {
-  if (CONFIG.interceptPaste !== true) return false
+  if (settings.interceptPaste !== true || settings.enabled !== true) return false
   const doc = deps.doc
   const data = event.clipboardData
   if (data === undefined || data === null) return false
@@ -1187,12 +1398,15 @@ function handlePaste(ctx, deps, event) {
     try {
       const span = shell.actions.captureInsertion()
       if (deps.useChips === true) {
+        /* label 只决定胶囊**显示**什么（chipDisplay='short' 时是 pic-1）；
+         * ref / codec / clipboardText 一路都是完整文件名 pic-1.png —— 发送时官方按
+         * codec.serialize(ref) 重新序列化，所以发出去的文本与附件名始终对得上（见 README）。 */
         ok =
           shell.insertReference(
             {
               source: SOURCE,
               ref: `${REF_PREFIX}${planned[index].name}`,
-              label: planned[index].name,
+              label: displayNameFor(planned[index].name, settings),
               appearance: 'file',
               clipboardText: planned[index].name,
             },
@@ -1200,7 +1414,8 @@ function handlePaste(ctx, deps, event) {
           ) === true
       } else {
         /* 拿不到 inputTriggers（注册不了 codec）时退回纯文本：
-         * 插胶囊会在**发送时**报 "no serializer for reference source"，宁可少个胶囊也不能让发送失败。 */
+         * 插胶囊会在**发送时**报 "no serializer for reference source"，宁可少个胶囊也不能让发送失败。
+         * 注意这里必须插**完整文件名**：纯文本没有 codec 兜底，插短名就会和附件名对不上。 */
         ok = typeof shell.actions.insertText === 'function' && shell.actions.insertText(planned[index].name, span) === true
       }
     } catch (error) {
@@ -1339,6 +1554,11 @@ function installHoverPreview(deps) {
   }
 
   const evaluate = () => {
+    /* 设置页可能把悬浮预览（或整个插件）关掉：关了就把已经弹出的卡一起收掉 */
+    if (settings.hoverPreview !== true || settings.enabled !== true) {
+      hide()
+      return
+    }
     const hit = hitTest(doc, registry, point.x, point.y)
     if (hit === null) {
       hide()
@@ -1358,7 +1578,7 @@ function installHoverPreview(deps) {
       if (fresh === null || fresh.key !== hit.key) return
       openKey = fresh.key
       card.show(fresh.record, fresh.rect)
-    }, Math.max(0, CONFIG.hoverDelayMs))
+    }, Math.max(0, settings.hoverDelayMs))
   }
 
   const onPointerMove = (event) => {
@@ -1439,7 +1659,8 @@ function clearThumbnailBadges(doc) {
  * @param doc - document。
  */
 function syncThumbnailBadges(doc) {
-  if (CONFIG.badgeThumbnails !== true) {
+  const size = BADGE_SIZES.includes(settings.badgeSize) ? settings.badgeSize : 'md'
+  if (size === 'off' || settings.enabled !== true) {
     clearThumbnailBadges(doc)
     return
   }
@@ -1465,14 +1686,16 @@ function syncThumbnailBadges(doc) {
     let badge = host.querySelector(`[${BADGE_ATTRIBUTE}]`)
     if (badge === null) {
       badge = doc.createElement('span')
-      badge.className = 'dsh-ip-badge'
       badge.setAttribute(BADGE_ATTRIBUTE, '')
       host.appendChild(badge)
     }
+    /* 类名每次都写一遍：设置页改档位后，下一次扫描就把尺寸换过来（同一个节点，不重挂） */
+    const className = `dsh-ip-badge dsh-ip-badge--${size}`
+    if (badge.className !== className) badge.className = className
     const text = String(parsed.index)
     if (badge.textContent !== text) badge.textContent = text
     if (badge.getAttribute('title') !== parsed.name) badge.setAttribute('title', parsed.name)
-    /* 缩略图本身也挂全名，悬浮就能看到 image-1.png，不用点开 */
+    /* 缩略图本身也挂全名，悬浮就能看到 pic-1.png，不用点开 */
     if (image.getAttribute('title') !== parsed.name) image.setAttribute('title', parsed.name)
   }
   /* 过期的角标（alt 变了 / 图片被换成非本插件命名的）顺手清掉 */
@@ -1509,7 +1732,7 @@ function installThumbnailBadges(deps) {
 
   const schedule = () => {
     if (timer !== null) return
-    const wait = Math.max(0, (Number.isFinite(CONFIG.badgeScanMinIntervalMs) ? CONFIG.badgeScanMinIntervalMs : 80) - (Date.now() - lastScan))
+    const wait = Math.max(0, (Number.isFinite(settings.badgeScanMinIntervalMs) ? settings.badgeScanMinIntervalMs : 80) - (Date.now() - lastScan))
     timer = setTimeout(scan, wait)
     if (typeof timer?.unref === 'function') timer.unref()
   }
@@ -1542,15 +1765,27 @@ function installThumbnailBadges(deps) {
  * 10. 插件体
  * ------------------------------------------------------------------------- */
 
-/** 需要的宿主服务（uiSession 走懒解析，避免某些 profile 没有它时整个插件不加载）。 */
+/*__PANEL__*/ ''
+
+/**
+ * 需要的宿主服务（uiSession 走懒解析，避免某些 profile 没有它时整个插件不加载）。
+ *
+ * `slots` / `locale`（设置页用）**故意不写在这里**：它们晚到或缺失时，本插件的
+ * 粘贴/胶囊/预览/角标必须照常工作 —— 设置页走 apply 里的 ctx.inject 懒解析，
+ * 拿不到就整块跳过（见 installSettingsPage）。
+ */
 const inject = ['conversation', 'sessions']
 
 /**
  * 装载插件。
+ *
+ * ⚠ 总开关**不能**在这里提前 return：设置存在 localStorage 里，如果启动时它就是关的，
+ * 早退会连设置页一起不装 —— 用户再也没有入口把它打开（自己把自己锁在门外）。
+ * 所以这里一律装齐（监听器、角标、设置页），各行为在运行时各自检查 `settings.enabled`：
+ * 关着的时候它们什么都不做，打开立刻恢复。
  * @param ctx - 客户端根上下文。
  */
 function apply(ctx) {
-  if (CONFIG.enabled !== true) return
   const doc = typeof globalThis.document === 'undefined' ? undefined : globalThis.document
   if (doc === undefined) return
 
@@ -1562,10 +1797,20 @@ function apply(ctx) {
     }
   }
 
+  /* React 由 DSH 的模块加载器提供（与内置设置页共用同一份，见 dsh-status-rotator /
+   * dsh-alert-sound 两个现成插件）。拿不到就只少一个设置页 —— 绝不影响别的功能。 */
+  let react
+  try {
+    react = typeof require === 'function' ? require('react') : undefined
+  } catch (error) {
+    react = undefined
+    report('react unavailable; settings page disabled', error)
+  }
+
   const style = installStyles(doc, STYLES)
-  const card = createPreviewCard(doc, CONFIG)
-  const registry = createRegistry(CONFIG, (record) => card.refresh(record))
-  const nameBook = createNameBook(CONFIG, browserStorage())
+  const card = createPreviewCard(doc, settings)
+  const registry = createRegistry(settings, (record) => card.refresh(record))
+  const nameBook = createNameBook(settings, browserStorage())
   const debug = { version: VERSION, lastPaste: null, useChips: false }
   /** 本插件挂到草稿上的附件 id（判断「这条消息是否已有本插件的图」用）。 */
   const mine = new Set()
@@ -1606,20 +1851,56 @@ function apply(ctx) {
   const offGuard = installSendGuard(deps)
   const offBadges = installThumbnailBadges(deps)
 
+  /* 设置页（React + settings.section 槽）。整块可选：拿不到 React/slots 就是一个空操作，
+   * 绝不抛出去 —— 这条纪律和「粘贴失败一律交还官方」是同一条。 */
+  let offSettingsPage = () => {}
+  try {
+    offSettingsPage = installSettingsPage(ctx, react, report)
+  } catch (error) {
+    report('install settings page failed', error)
+  }
+
+  /* 设置改了就**立刻**生效：角标重扫（档位/开关）、重跑自检（含关掉时清提示）、
+   * 关掉悬浮预览时把已弹出的卡收掉。 */
+  const onSettingsChange = () => {
+    try {
+      syncThumbnailBadges(doc)
+    } catch (error) {
+      report('badge resync failed', error)
+    }
+    try {
+      auditor.evaluate()
+    } catch (error) {
+      report('audit resync failed', error)
+    }
+    if (settings.hoverPreview !== true || settings.enabled !== true) {
+      try {
+        card.hide()
+      } catch (error) {
+        /* 收卡失败无所谓，下次指针移动还会再收 */
+      }
+    }
+  }
+  const offSettingsWatch = subscribeSettings(onSettingsChange)
+
   /* 进会话时先自检一次：老草稿里可能已经存在"删了图但名字还在"的情况 */
   auditor.evaluate()
 
   /* 调试钩子：出问题时在浏览器控制台里就能看清插件解析到了哪个会话、刚才插了什么。
-   * 例：__dshInlinePastes.debug.lastPaste / __dshInlinePastes.currentSession() */
+   * 例：__dshInlinePastes.debug.lastPaste / __dshInlinePastes.currentSession()
+   * 设置也可以用控制台改：__dshInlinePastes.setSettings({ badgeSize: 'lg' }) */
   try {
     globalThis.__dshInlinePastes = {
       version: VERSION,
-      CONFIG,
+      CONFIG: settings,
+      settings,
       debug,
       useChips: () => debug.useChips === true,
       auditNow: () => auditor.evaluate()?.verdict,
       remembered: () => registry.size(),
       has: (name) => registry.has(name),
+      setSettings: (patch) => updateSettings(patch),
+      resetSettings: () => resetSettings(),
       currentSession: () => {
         try {
           return resolveSession(ctx)?.sessionId
@@ -1655,6 +1936,16 @@ function apply(ctx) {
       report('uninstall badges failed', error)
     }
     try {
+      offSettingsWatch()
+    } catch (error) {
+      report('unsubscribe settings failed', error)
+    }
+    try {
+      offSettingsPage()
+    } catch (error) {
+      report('uninstall settings page failed', error)
+    }
+    try {
       auditor.dispose()
     } catch (error) {
       report('dispose auditor failed', error)
@@ -1672,7 +1963,7 @@ module.exports = {
   inject,
   apply,
   __test: {
-    CONFIG,
+    CONFIG: settings,
     SOURCE,
     TRIGGER,
     VERSION,
@@ -1720,5 +2011,25 @@ module.exports = {
     service,
     describe,
     formatBytes,
+    /* 设置系统（0 节）与设置页（10.5 节）：单测直接测这几个纯函数 */
+    DEFAULTS,
+    defaults,
+    mergeSettings,
+    readSettings,
+    updateSettings,
+    resetSettings,
+    subscribeSettings,
+    displayNameFor,
+    SETTINGS_STORAGE_KEY,
+    BADGE_SIZES,
+    CHIP_DISPLAYS,
+    LANGS,
+    PREFIX_PATTERN,
+    resolveLang,
+    translate,
+    I18N,
+    SETTINGS_NS,
+    createSettingsPanel,
+    installSettingsPage,
   },
 }

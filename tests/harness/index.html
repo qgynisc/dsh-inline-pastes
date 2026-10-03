@@ -69,6 +69,8 @@
       }
     </script>
     <script src="/lib/client.js"></script>
-    <script src="/tests/harness/drive.js"></script>
+    <!-- drive.js 是 ES module：要 import tests/helpers/react-shim.js（设置页组件的 React 替身）。
+         module 是 defer 的，正好在经典 script（上面的 loader + bundle）之后执行。 -->
+    <script type="module" src="/tests/harness/drive.js"></script>
   </body>
 </html>

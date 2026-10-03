@@ -1,7 +1,7 @@
 /**
  * 发送前自检：文字里的图片名字 ↔ 本条消息的图片。
  *
- * 关键契约：官方把名字贴在每张图上发出去（`Image "image-1.png" (...)`），
+ * 关键契约：官方把名字贴在每张图上发出去（`Image "pic-1.png" (...)`），
  * 所以只要「文字里提到的名字都真有那张图、且不重复」，模型就不会串。
  */
 import test from 'node:test'
@@ -22,30 +22,30 @@ function keydownHandler(doc) {
 
 /** 造一个「自检不通过」的草稿：文字里点了一个不存在的图片名。 */
 function misalign(ctx, patch) {
-  patch({ occurrences: [{ source: 'inline-paste', label: 'image-1.png' }], attachmentIds: [], draft: 'image-1.png ' })
+  patch({ occurrences: [{ source: 'inline-paste', label: 'pic-1.png' }], attachmentIds: [], draft: 'pic-1.png ' })
 }
 
 test('auditDraft：对得上就通过', () => {
-  const verdict = auditDraft(['image-1.png', 'image-2.png'], ['image-1.png', 'image-2.png'])
+  const verdict = auditDraft(['pic-1.png', 'pic-2.png'], ['pic-1.png', 'pic-2.png'])
   assert.equal(verdict.ok, true)
   assert.equal(verdict.message, undefined)
 })
 
 test('auditDraft：文字点了名但消息里没有这张图 → 不通过', () => {
-  const verdict = auditDraft(['image-1.png', 'image-3.png'], ['image-1.png', 'image-2.png'])
+  const verdict = auditDraft(['pic-1.png', 'pic-3.png'], ['pic-1.png', 'pic-2.png'])
   assert.equal(verdict.ok, false)
-  assert.deepEqual([...verdict.dangling], ['image-3.png'])
-  assert.match(verdict.message, /image-3\.png/)
+  assert.deepEqual([...verdict.dangling], ['pic-3.png'])
+  assert.match(verdict.message, /pic-3\.png/)
 })
 
 test('auditDraft：同一个名字出现两次 → 不通过', () => {
-  const verdict = auditDraft(['image-1.png', 'image-1.png'], ['image-1.png', 'image-1.png'])
+  const verdict = auditDraft(['pic-1.png', 'pic-1.png'], ['pic-1.png', 'pic-1.png'])
   assert.equal(verdict.ok, false)
-  assert.deepEqual([...verdict.duplicates], ['image-1.png'])
+  assert.deepEqual([...verdict.duplicates], ['pic-1.png'])
 })
 
 test('auditDraft：有图但文字没点名 → 不算错（图照样带着名字发出去）', () => {
-  const verdict = auditDraft(['image-1.png'], ['image-1.png', 'image-2.png'])
+  const verdict = auditDraft(['pic-1.png'], ['pic-1.png', 'pic-2.png'])
   assert.equal(verdict.ok, true)
 })
 
@@ -61,13 +61,13 @@ test('auditInputs：只取本插件的胶囊 + 附件真实文件名', () => {
   const state = {
     occurrences: [
       { source: 'reference', label: '@某文件' },
-      { source: 'inline-paste', label: 'image-1.png' },
-      { source: 'inline-paste', label: 'image-2.png' },
+      { source: 'inline-paste', label: 'pic-1.png' },
+      { source: 'inline-paste', label: 'pic-2.png' },
     ],
     attachmentIds: drafts.map((draft) => draft.id),
   }
   const inputs = auditInputs(state, conversation)
-  assert.deepEqual(inputs.chipLabels, ['image-1.png', 'image-2.png'])
+  assert.deepEqual(inputs.chipLabels, ['pic-1.png', 'pic-2.png'])
   assert.deepEqual(inputs.attachmentNames, ['a.png', 'b.png'])
 })
 
@@ -81,11 +81,11 @@ test('实时自检：草稿对不上就在输入框上方挂一条 info 提示',
   const notices = spy.notices.filter((item) => item.level === 'info')
   assert.equal(notices.length, 1, '应当出现一条 info 提示')
   assert.match(notices[0].text, new RegExp(`^${AUDIT_NOTICE_PREFIX}`))
-  assert.match(notices[0].text, /image-1\.png/)
+  assert.match(notices[0].text, /pic-1\.png/)
   assert.equal(noticesStore.getSnapshot()?.level, 'info')
 
   /* 修好之后提示要自己消失 */
-  const drafts = ctx.get('conversation').createDrafts('s1', [makeImageFile('image-1.png')])
+  const drafts = ctx.get('conversation').createDrafts('s1', [makeImageFile('pic-1.png')])
   patch({ attachmentIds: drafts.map((draft) => draft.id) })
   assert.equal(spy.notices.filter((item) => item.level === 'info').length, 1, '对上了就不该再挂新提示')
   assert.equal(noticesStore.getSnapshot(), null, '旧提示应当被清掉')
@@ -133,7 +133,7 @@ test('拦截：自检通过、Shift+Enter、输入法组合中、不在输入框
   }
 
   /* 对得上时也不拦 */
-  const drafts = ctx.get('conversation').createDrafts('s1', [makeImageFile('image-1.png')])
+  const drafts = ctx.get('conversation').createDrafts('s1', [makeImageFile('pic-1.png')])
   patch({ attachmentIds: drafts.map((draft) => draft.id) })
   const aligned = makeKeydownEvent('Enter')
   handler(aligned)
@@ -173,7 +173,7 @@ test('端到端：粘贴 → 从 dock 删掉缩略图 → 自检不通过（这�
   patch({ attachmentIds: [] })
   const verdict = auditor.evaluate()?.verdict
   assert.equal(verdict.ok, false)
-  assert.deepEqual([...verdict.dangling], ['image-1.png'])
+  assert.deepEqual([...verdict.dangling], ['pic-1.png'])
   assert.equal(spy.notices.filter((item) => item.level === 'info').length, 1)
   assert.equal(state.occurrences.length, 1, '胶囊仍在文字里')
   auditor.dispose()

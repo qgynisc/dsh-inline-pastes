@@ -5,11 +5,14 @@
  *   ② 悬浮胶囊弹预览卡；
  *   ③ 悬浮已发送气泡里的同名文字也弹预览卡；
  *   ④ 没登记的名字不弹；
- *   ⑤ 混有非图片文件的粘贴原样放行（不 preventDefault）。
+ *   ⑤ 混有非图片文件的粘贴原样放行（不 preventDefault）；
+ *   ⑥ 设置页注册到 settings.section，且面板里的改动**立刻**作用到真实 DOM（角标尺寸等）。
  *
  * 结果同时写进 DOM（#results）并 POST 回 verify-browser.mjs 的静态服务器。
  */
 /* global window, document, File, DataTransfer, ClipboardEvent, PointerEvent, fetch */
+import { createReact, render as renderTree, textOf } from '../helpers/react-shim.js'
+
 ;(function () {
   const results = []
   const editor = document.getElementById('editor')
@@ -103,11 +106,34 @@
 
     /** 本插件向 input-trigger 管道注册的 source（发送时要靠它的 codec 序列化胶囊）。 */
     const registeredSources = []
+    /** 设置页注册（settings.section 槽）。 */
+    const registeredSections = []
+    const slots = {
+      register(descriptor, component) {
+        registeredSections.push({ descriptor, component })
+        return () => {
+          const index = registeredSections.findIndex((item) => item.descriptor === descriptor)
+          if (index >= 0) registeredSections.splice(index, 1)
+        }
+      },
+      inject(name, callback) {
+        callback()
+        return () => {}
+      },
+    }
+    const locale = {
+      active: 'zh',
+      register: () => () => {},
+      getLocale: () => ({ active: locale.active }),
+      subscribe: () => () => {},
+    }
     const ctx = {
       get(name) {
         if (name === 'conversation') return conversation
         if (name === 'uiSession') return { current: { getSnapshot: () => ({ key: 'session-harness', ctx: {} }) } }
         if (name === 'sessions') return { list: { getSnapshot: () => ({ ids: [], byId: {} }) }, scope: () => ({}), binding: () => undefined }
+        if (name === 'slots') return slots
+        if (name === 'locale') return locale
         if (name === 'inputTriggers') {
           return {
             registerSource(source) {
@@ -120,6 +146,11 @@
           }
         }
         return undefined
+      },
+      /** 真官方的 ctx.inject：等服务就绪后再回调（设置页就挂在这条链路上）。 */
+      inject(services, callback) {
+        callback({ get: (name) => ctx.get(name) })
+        return () => {}
       },
       effect: (fn) => fn(),
     }
@@ -139,7 +170,7 @@
       publish()
     }
 
-    return { ctx, spy, shell, state, send, patch, registeredSources }
+    return { ctx, spy, shell, state, send, patch, registeredSources, registeredSections, locale }
   }
 
   /* ---------------- 事件工厂 ---------------- */
@@ -200,14 +231,34 @@
     check('bundle 注册到 __ModuleLoader__ 且 id 正确', module !== undefined && module.id === expectedId, module && module.id)
     if (module === undefined) return finish()
 
-    const mod = module.factory(() => {
-      throw new Error('不应有平台模块解析')
+    /* 真机上是 DSH 模块加载器提供 React（设置页用）；这里给同一个替身，
+     * 顺带验证「require('react') 是唯一允许的模块解析」。 */
+    const react = createReact()
+    const mod = module.factory((name) => {
+      if (name === 'react') return react
+      throw new Error(`不应解析平台模块：${name}`)
     })
     const env = makeEnv()
-    const { ctx, spy, state, send, patch, registeredSources } = env
+    const { ctx, spy, state, send, patch, registeredSources, registeredSections, locale } = env
     mod.apply(ctx)
     check('样式已注入', document.querySelector('style[data-dsh-inline-pastes]') !== null)
     check('预览卡已挂到 body', card() !== null)
+
+    /* 设置页（settings.section 槽） */
+    check('设置页注册到 settings.section', registeredSections.length === 1, `${registeredSections.length} 个`)
+    const section = registeredSections[0]
+    if (section !== undefined) {
+      check('设置页槽名 / id 正确', section.descriptor.name === 'settings.section' && section.descriptor.id === 'inline-pastes', `${section.descriptor.name}/${section.descriptor.id}`)
+      check('左侧导航名默认中文「混合排版」', section.descriptor.label() === '混合排版', section.descriptor.label())
+      const panelText = textOf(renderTree(react, section.component))
+      check('面板标题是「输入框图文混排设置」', panelText.includes('输入框图文混排设置'))
+      check('面板写明由本插件实现 + 项目地址', panelText.includes('@qgynisc/dsh-inline-pastes') && panelText.includes('https://github.com/qgynisc/dsh-inline-pastes'))
+      /* 界面语言：跟随 DSH locale → 面板与导航名一起变 */
+      locale.active = 'en'
+      check('跟随 DSH 切英文后导航名变 Mixed layout', section.descriptor.label() === 'Mixed layout', section.descriptor.label())
+      check('面板文案跟着变英文', textOf(renderTree(react, section.component)).includes('Composer image & text layout'))
+      locale.active = 'zh'
+    }
 
     /* 官方在发送时会按 source 找 codec 序列化（缺了就报
      * slash: no serializer for reference source "inline-paste" 并拦下发送） */
@@ -216,10 +267,10 @@
     check('触发符不是 @ 或 /（否则会挤进官方菜单）', source?.trigger !== '@' && source?.trigger !== '/', JSON.stringify(source?.trigger))
     check('codec 具备 serialize', typeof source?.codec?.serialize === 'function')
     if (typeof source?.codec?.serialize === 'function') {
-      const serialized = await source.codec.serialize('dsh-inline-paste:image-1.png')
-      check('codec.serialize 还原出模型侧的名字', serialized === 'image-1.png', String(serialized))
-      const clipboard = typeof source.codec.clipboardText === 'function' ? source.codec.clipboardText('dsh-inline-paste:image-9.png') : undefined
-      check('codec.clipboardText 与之一致', clipboard === 'image-9.png', String(clipboard))
+      const serialized = await source.codec.serialize('dsh-inline-paste:pic-1.png')
+      check('codec.serialize 还原出模型侧的名字', serialized === 'pic-1.png', String(serialized))
+      const clipboard = typeof source.codec.clipboardText === 'function' ? source.codec.clipboardText('dsh-inline-paste:pic-9.png') : undefined
+      check('codec.clipboardText 与之一致', clipboard === 'pic-9.png', String(clipboard))
     }
 
     /* ① 粘贴第一张图：胶囊 + 编号 + 挂附件 */
@@ -227,10 +278,10 @@
     check('粘贴被接管（preventDefault）', first.defaultPrevented === true)
     const chips = () => [...editor.querySelectorAll('[data-composer-chip="inline-paste"]')]
     check('光标处出现内联胶囊', chips().length === 1, `chips=${chips().length}`)
-    check('胶囊文字是 image-1.png', chips()[0]?.textContent === 'image-1.png', chips()[0]?.textContent)
-    check('发送文本（clipboardText）就是 image-1.png', state.draft.trim() === 'image-1.png', state.draft)
-    check('重命名后的 File 名 = image-1.png', spy.created[0]?.name === 'image-1.png', spy.created[0]?.name)
-    check('胶囊 ref 里带着名字（发送时靠它序列化）', spy.inserted[0]?.ref?.ref === 'dsh-inline-paste:image-1.png', spy.inserted[0]?.ref?.ref)
+    check('胶囊里显示的是短名 pic-1', chips()[0]?.textContent === 'pic-1', chips()[0]?.textContent)
+    check('发送文本（clipboardText）就是 pic-1.png', state.draft.trim() === 'pic-1.png', state.draft)
+    check('重命名后的 File 名 = pic-1.png', spy.created[0]?.name === 'pic-1.png', spy.created[0]?.name)
+    check('胶囊 ref 里带着名字（发送时靠它序列化）', spy.inserted[0]?.ref?.ref === 'dsh-inline-paste:pic-1.png', spy.inserted[0]?.ref?.ref)
     check('草稿附件已挂上', JSON.stringify(spy.attachments) === JSON.stringify(['draft-1']), JSON.stringify(spy.attachments))
 
     /* ② 悬浮胶囊 → 预览卡 */
@@ -241,7 +292,7 @@
     const opened = card()
     check('悬浮胶囊弹出预览卡', opened.dataset.open === 'true', `data-open=${opened.dataset.open}`)
     check('预览卡显示的是这张图', (opened.querySelector('img').src || '').startsWith('blob:'), opened.querySelector('img').src.slice(0, 24))
-    check('预览卡带文件名', opened.querySelector('.dsh-ip-name').textContent === 'image-1.png', opened.querySelector('.dsh-ip-name').textContent)
+    check('预览卡带文件名', opened.querySelector('.dsh-ip-name').textContent === 'pic-1.png', opened.querySelector('.dsh-ip-name').textContent)
 
     /* 移开 → 收卡 */
     pointerAt(5, document.body.scrollHeight - 5)
@@ -249,9 +300,9 @@
     check('移开后收起预览卡', card().dataset.open !== 'true', `data-open=${card().dataset.open}`)
 
     /* ③ 已发送气泡里的同名文字 → 预览卡 */
-    bubble.textContent = '3、修改bug如图： image-1.png ，把它变成可自动定位。'
+    bubble.textContent = '3、修改bug如图： pic-1.png ，把它变成可自动定位。'
     await sleep(30)
-    const textRect = rectOfText(bubble, 'image-1.png')
+    const textRect = rectOfText(bubble, 'pic-1.png')
     check('气泡里能找到名字文本', textRect !== null && textRect.width > 0)
     if (textRect !== null) {
       pointerAt(textRect.left + textRect.width / 2, textRect.top + textRect.height / 2)
@@ -260,9 +311,9 @@
     }
 
     /* ④ 没登记的名字不弹 */
-    bubble.textContent = '这里写的是 image-99.png，没登记过。'
+    bubble.textContent = '这里写的是 pic-99.png，没登记过。'
     await sleep(30)
-    const missRect = rectOfText(bubble, 'image-99.png')
+    const missRect = rectOfText(bubble, 'pic-99.png')
     if (missRect !== null) {
       pointerAt(missRect.left + missRect.width / 2, missRect.top + missRect.height / 2)
       await sleep(420)
@@ -271,7 +322,7 @@
 
     /* ⑤ 第二张图继续编号 */
     paste(clipboardWith([imageFile('image.png', 'image/png')]))
-    check('第二张图编号为 image-2.png', chips()[1]?.textContent === 'image-2.png', chips()[1]?.textContent)
+    check('第二张图编号为 pic-2', chips()[1]?.textContent === 'pic-2', chips()[1]?.textContent)
 
     /* ⑥ 混有非图片文件的粘贴原样放行 */
     const mixed = clipboardWith([imageFile('x.png', 'image/png'), imageFile('x.pdf', 'application/pdf')])
@@ -285,17 +336,44 @@
     paste(withText)
     check('剪贴板里的文字被补插', spy.pasted.includes('1、功能1 '), JSON.stringify(spy.pasted))
 
-    /* ⑧ 发送之后：下一条消息从 image-1 重新开号 */
+    /* ⑧ 发送之后：下一条消息从 pic-1 重新开号 */
     send()
     paste(clipboardWith([imageFile('image.png', 'image/png')]))
     const lastChip = chips()[chips().length - 1]
-    check('发送后新消息重新从 image-1 开始', lastChip?.textContent === 'image-1.png', lastChip?.textContent)
+    check('发送后新消息重新从 pic-1 开始', lastChip?.textContent === 'pic-1', lastChip?.textContent)
 
     /* ⑨ 名字跨消息重复时，悬浮预览要落到**那条消息自己的图**上 */
     await driveCrossMessagePreview()
 
     /* ⑪ 缩略图角标：dock + 已发送气泡的图片行（真 DOM + 真 MutationObserver） */
     await driveThumbnailBadges()
+
+    /* ⑫ 设置页改了**立刻**生效：角标档位 → 真实 DOM 上的类名 / 清除 */
+    const hook = window.__dshInlinePastes
+    check('调试钩子暴露 setSettings', typeof hook?.setSettings === 'function')
+    if (typeof hook?.setSettings === 'function') {
+      hook.setSettings({ badgeSize: 'lg' })
+      await sleep(150)
+      const sized = document.querySelector('[data-dsh-inline-paste-badge]')
+      check('改档位后角标立刻变大（类名带 --lg）', sized !== null && sized.className.includes('dsh-ip-badge--lg'), sized === null ? '没有角标' : sized.className)
+      hook.setSettings({ badgeSize: 'off' })
+      await sleep(150)
+      check('档位改成「关」后角标立刻清掉', document.querySelectorAll('[data-dsh-inline-paste-badge]').length === 0, `${document.querySelectorAll('[data-dsh-inline-paste-badge]').length} 个`)
+      hook.setSettings({ badgeSize: 'md' })
+
+      /* ⑬ 胶囊显示切成完整名：之后粘的胶囊直接显示 pic-1.png */
+      hook.setSettings({ chipDisplay: 'full' })
+      send()
+      paste(clipboardWith([imageFile('full.png', 'image/png')]))
+      const fullChip = chips().at(-1)
+      check('切到完整名后胶囊显示 pic-1.png', fullChip?.textContent === 'pic-1.png', fullChip?.textContent)
+      hook.setSettings({ chipDisplay: 'short' })
+      check('切回短名后重新按短名插', (() => {
+        send()
+        paste(clipboardWith([imageFile('short.png', 'image/png')]))
+        return chips().at(-1)?.textContent === 'pic-1'
+      })(), chips().at(-1)?.textContent)
+    }
 
     /* ⑩ 发送前自检：删掉 dock 缩略图后，第一次回车被拦、再按一次放行 */
     send()
@@ -308,7 +386,7 @@
     await sleep(30)
     const notice = spy.notices.filter((item) => item.level === 'info').at(-1)
     check('删掉缩略图后出现自检提示', typeof notice?.text === 'string' && notice.text.startsWith('图片名自检：'), notice?.text)
-    check('提示里点出了对不上的名字', typeof notice?.text === 'string' && notice.text.includes('image-1.png'), notice?.text)
+    check('提示里点出了对不上的名字', typeof notice?.text === 'string' && notice.text.includes('pic-1.png'), notice?.text)
 
     const blockedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
     editor.dispatchEvent(blockedEnter)
@@ -316,6 +394,20 @@
     const allowedEnter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })
     editor.dispatchEvent(allowedEnter)
     check('再按一次回车放行（不把用户卡死）', allowedEnter.defaultPrevented === false)
+
+    /* ⑭ 总开关：关掉后行为立刻停，但设置页仍注册着 —— 不能被自己锁在门外 */
+    if (typeof hook?.setSettings === 'function') {
+      hook.setSettings({ enabled: false })
+      await sleep(150)
+      check('关掉总开关后角标立刻清掉', document.querySelectorAll('[data-dsh-inline-paste-badge]').length === 0, `${document.querySelectorAll('[data-dsh-inline-paste-badge]').length} 个`)
+      check('关掉总开关后设置页仍在（永远开得回来）', registeredSections.length === 1, `${registeredSections.length} 个`)
+      const before = chips().length
+      const offPaste = paste(clipboardWith([imageFile('off.png', 'image/png')]))
+      check('关掉总开关后粘贴不接管', offPaste.defaultPrevented === false && chips().length === before, `chips=${chips().length}`)
+      hook.setSettings({ enabled: true })
+      const onPaste = paste(clipboardWith([imageFile('on.png', 'image/png')]))
+      check('重新打开后粘贴立刻恢复接管', onPaste.defaultPrevented === true && chips().length === before + 1, `chips=${chips().length}`)
+    }
 
     finish()
   }
@@ -341,7 +433,7 @@
       image.height = 8
       attachments.append(image)
       const text = document.createElement('div')
-      text.textContent = `${label} [image-1.png]`
+      text.textContent = `${label} [pic-1.png]`
       item.append(attachments, text)
       host.append(item)
     }
@@ -353,7 +445,7 @@
       ['k2', secondSrc, '第二条消息'],
     ]) {
       const item = host.querySelector(`[data-chat-node-key="${key}"]`)
-      const rect = rectOfText(item, 'image-1.png')
+      const rect = rectOfText(item, 'pic-1.png')
       if (rect === null) {
         check(`${label}：找到同名文字`, false)
         continue
@@ -370,12 +462,12 @@
     const pixel = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'
     const dock = document.createElement('div')
     dock.setAttribute('data-composer-card', '')
-    dock.innerHTML = `<button><img alt="image-1.png" src="${pixel}" width="64" height="64"></button>`
+    dock.innerHTML = `<button><img alt="pic-1.png" src="${pixel}" width="64" height="64"></button>`
     document.body.append(dock)
 
     const row = document.createElement('div')
     row.setAttribute('data-message-attachments', '')
-    row.innerHTML = `<button><img alt="image-2.png" src="${pixel}" width="64" height="64"></button><button><img alt="photo.png" src="${pixel}" width="64" height="64"></button>`
+    row.innerHTML = `<button><img alt="pic-2.png" src="${pixel}" width="64" height="64"></button><button><img alt="photo.png" src="${pixel}" width="64" height="64"></button>`
     document.body.append(row)
 
     /* 等 MutationObserver + 节流扫描 */
@@ -388,7 +480,7 @@
       check('角标不挡点击（pointer-events:none）', style.pointerEvents === 'none', style.pointerEvents)
       check('角标是绝对定位', style.position === 'absolute', style.position)
     }
-    check('缩略图挂上了全名 title', dock.querySelector('img').getAttribute('title') === 'image-1.png', dock.querySelector('img').getAttribute('title'))
+    check('缩略图挂上了全名 title', dock.querySelector('img').getAttribute('title') === 'pic-1.png', dock.querySelector('img').getAttribute('title'))
 
     const rowBadges = row.querySelectorAll(`[${'data-dsh-inline-paste-badge'}]`)
     check('气泡图片行按 alt 出角标', rowBadges.length === 1 && rowBadges[0].textContent === '2', `${rowBadges.length} 个 / ${rowBadges[0] === undefined ? '-' : rowBadges[0].textContent}`)

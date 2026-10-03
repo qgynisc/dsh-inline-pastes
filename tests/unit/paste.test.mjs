@@ -35,18 +35,18 @@ test('粘贴图片：光标处插胶囊 + 挂草稿附件 + 登记预览', () =>
   assert.equal(spy.inserted.length, 1)
   const [insert] = spy.inserted
   assert.equal(insert.ref.source, 'inline-paste')
-  assert.equal(insert.ref.label, 'image-1.png')
-  assert.equal(insert.ref.clipboardText, 'image-1.png')
+  assert.equal(insert.ref.label, 'pic-1')
+  assert.equal(insert.ref.clipboardText, 'pic-1.png')
   assert.equal(insert.ref.appearance, 'file')
-  assert.equal(insert.ref.ref, 'dsh-inline-paste:image-1.png')
+  assert.equal(insert.ref.ref, 'dsh-inline-paste:pic-1.png')
   assert.deepEqual(spy.attachments, ['draft-1'])
-  assert.equal(spy.createdFiles[0].name, 'image-1.png')
-  assert.equal(deps.registry.has('image-1.png'), true)
-  assert.equal(deps.registry.get('image-1.png').url.startsWith('blob:'), true)
-  assert.equal(deps.registry.get('image-1.png').bytes, 16)
+  assert.equal(spy.createdFiles[0].name, 'pic-1.png')
+  assert.equal(deps.registry.has('pic-1.png'), true)
+  assert.equal(deps.registry.get('pic-1.png').url.startsWith('blob:'), true)
+  assert.equal(deps.registry.get('pic-1.png').bytes, 16)
 })
 
-test('连续粘贴自动编号 image-1 / image-2', () => {
+test('连续粘贴自动编号 pic-1 / pic-2', () => {
   const { ctx, spy } = makeContext()
   const book = createNameBook(CONFIG)
   const registry = createRegistry(CONFIG)
@@ -55,7 +55,7 @@ test('连续粘贴自动编号 image-1 / image-2', () => {
   run(ctx, makePasteEvent([makeImageFile('image.png')]), { nameBook: book, registry, doc })
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png'],
+    ['pic-1', 'pic-2'],
   )
   assert.deepEqual(spy.attachments, ['draft-1', 'draft-2'])
 })
@@ -63,8 +63,8 @@ test('连续粘贴自动编号 image-1 / image-2', () => {
 test('WebP 走真实扩展名', () => {
   const { ctx, spy } = makeContext()
   run(ctx, makePasteEvent([makeImageFile('image.webp', 'image/webp')]))
-  assert.equal(spy.inserted[0].ref.label, 'image-1.webp')
-  assert.equal(spy.createdFiles[0].name, 'image-1.webp')
+  assert.equal(spy.inserted[0].ref.label, 'pic-1')
+  assert.equal(spy.createdFiles[0].name, 'pic-1.webp')
 })
 
 test('一次粘贴多张图：全部插胶囊、按序挂附件', () => {
@@ -74,7 +74,7 @@ test('一次粘贴多张图：全部插胶囊、按序挂附件', () => {
   assert.equal(consumed, true)
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png', 'image-3.png'],
+    ['pic-1', 'pic-2', 'pic-3'],
   )
   assert.deepEqual(spy.attachments, ['draft-1', 'draft-2', 'draft-3'])
 })
@@ -254,9 +254,9 @@ test('认不出会话时粘贴原样放行（不接管、不 preventDefault）',
   assert.equal(event.defaultPrevented, false)
 })
 
-/* ---- 每条消息从 image-1 重开 ---- */
+/* ---- 每条消息从 pic-1 重开 ---- */
 
-test('同一消息内连续粘贴：image-1 → image-2', () => {
+test('同一消息内连续粘贴：pic-1 → pic-2', () => {
   const { ctx, spy } = makeContext()
   const book = createNameBook(CONFIG)
   const registry = createRegistry(CONFIG)
@@ -265,11 +265,11 @@ test('同一消息内连续粘贴：image-1 → image-2', () => {
   run(ctx, makePasteEvent([makeImageFile('b.png')]), { nameBook: book, registry, doc })
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png'],
+    ['pic-1', 'pic-2'],
   )
 })
 
-test('发送之后再粘：从 image-1 重新开号', () => {
+test('发送之后再粘：从 pic-1 重新开号', () => {
   const { ctx, spy, send } = makeContext()
   const book = createNameBook(CONFIG)
   const registry = createRegistry(CONFIG)
@@ -280,11 +280,11 @@ test('发送之后再粘：从 image-1 重新开号', () => {
   run(ctx, makePasteEvent([makeImageFile('c.png')]), { nameBook: book, registry, doc })
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png', 'image-1.png'],
+    ['pic-1', 'pic-2', 'pic-1'],
   )
 })
 
-test('先打字再插第一张图，也算新消息（从 image-1 开始）', () => {
+test('先打字再插第一张图，也算新消息（从 pic-1 开始）', () => {
   const { ctx, spy, state } = makeContext()
   state.draft = '1、功能1 '
   const book = createNameBook(CONFIG)
@@ -294,7 +294,7 @@ test('先打字再插第一张图，也算新消息（从 image-1 开始）', ()
   run(ctx, makePasteEvent([makeImageFile('b.png')]), { nameBook: book, registry, doc })
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png'],
+    ['pic-1', 'pic-2'],
   )
 })
 
@@ -308,7 +308,7 @@ test('一次粘多张时只有第一张重开，其余接着排', () => {
   run(ctx, makePasteEvent([makeImageFile('c.png'), makeImageFile('d.png')]), { nameBook: book, registry, doc })
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png', 'image-1.png', 'image-2.png'],
+    ['pic-1', 'pic-2', 'pic-1', 'pic-2'],
   )
 })
 
@@ -316,7 +316,7 @@ test('startsNewMessage：草稿里有本插件的胶囊就不是新消息', () =
   const { startsNewMessage } = mod.__test
   assert.equal(startsNewMessage({ occurrences: [] }), true)
   assert.equal(startsNewMessage({ occurrences: [{ source: 'reference' }] }), true)
-  assert.equal(startsNewMessage({ occurrences: [{ source: 'inline-paste', label: 'image-1.png' }] }), false)
+  assert.equal(startsNewMessage({ occurrences: [{ source: 'inline-paste', label: 'pic-1.png' }] }), false)
   /* 快照没有 occurrences 时退化为「草稿与附件都空」 */
   assert.equal(startsNewMessage({ draft: '1、功能1 ' }), false)
   assert.equal(startsNewMessage({ draft: '' }), true)
@@ -326,8 +326,8 @@ test('startsNewMessage：草稿里有本插件的胶囊就不是新消息', () =
 
 test('nameFromRef 从隐藏 ref 还原出模型侧的名字', () => {
   const { nameFromRef } = mod.__test
-  assert.equal(nameFromRef('dsh-inline-paste:image-1.png'), 'image-1.png')
-  assert.equal(nameFromRef('image-2.webp'), 'image-2.webp')
+  assert.equal(nameFromRef('dsh-inline-paste:pic-1.png'), 'pic-1.png')
+  assert.equal(nameFromRef('pic-2.webp'), 'pic-2.webp')
   assert.equal(nameFromRef(undefined), '')
 })
 
@@ -338,12 +338,12 @@ test('拿不到 inputTriggers 时退回纯文本插入，而不是插一个发�
   assert.equal(spy.inserted.length, 0, '不应插入胶囊')
   assert.deepEqual(
     spy.insertedTexts.map((item) => item.text),
-    ['image-1.png'],
+    ['pic-1.png'],
   )
   assert.deepEqual(spy.attachments, ['draft-1'])
 })
 
-/* ---- 胶囊被删掉但附件还留着：不能再从 image-1 重开（否则一条消息俩 image-1） ---- */
+/* ---- 胶囊被删掉但附件还留着：不能再从 pic-1 重开（否则一条消息俩 pic-1） ---- */
 
 test('删掉胶囊但保留 dock 缩略图时，编号接着排（不重开）', () => {
   const { ctx, spy, state, send } = makeContext()
@@ -365,11 +365,11 @@ test('删掉胶囊但保留 dock 缩略图时，编号接着排（不重开）',
   assert.equal(runWithMine(makePasteEvent([makeImageFile('b.png')])), true)
   assert.deepEqual(
     spy.inserted.map((item) => item.ref.label),
-    ['image-1.png', 'image-2.png'],
+    ['pic-1', 'pic-2'],
   )
 
   /* 真发送之后（附件也清空）才重新开号 */
   send()
   assert.equal(runWithMine(makePasteEvent([makeImageFile('c.png')])), true)
-  assert.equal(spy.inserted[2].ref.label, 'image-1.png')
+  assert.equal(spy.inserted[2].ref.label, 'pic-1')
 })

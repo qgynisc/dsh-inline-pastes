@@ -9,7 +9,8 @@
  *      name（dsh-client-modules 按 loader 条目的包名解析注册 ID，写错会
  *      "loaded without registering"）。
  *
- * 同时把 src/styles.css 注入 src/client.js 里的 `/*__STYLES__*\/ ''` 锚点。
+ * 同时把 src/styles.css 注入 src/client.js 里的 `/*__STYLES__*\/ ''` 锚点，
+ * 把 src/panel.js（设置页 React 面板）注入 `/*__PANEL__*\/ ''` 锚点。
  *
  * 用法：node scripts/build.mjs
  */
@@ -23,6 +24,7 @@ const MANIFEST = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const PLUGIN_ID = MANIFEST.name
 const STYLE_ANCHOR = "/*__STYLES__*/ ''"
 const VERSION_ANCHOR = "/*__VERSION__*/ '0.0.0'"
+const PANEL_ANCHOR = "/*__PANEL__*/ ''"
 
 /** 读一个源文件，缺失直接报错（不静默产出半个产物）。 */
 function readSource(relative) {
@@ -44,11 +46,22 @@ if (!clientSource.includes(VERSION_ANCHOR)) {
   throw new Error(`构建失败：src/client.js 里找不到版本锚点 ${VERSION_ANCHOR}`)
 }
 clientSource = clientSource.replace(VERSION_ANCHOR, () => JSON.stringify(MANIFEST.version))
+/* 设置页面板单独成文件（src/panel.js），这里内联进 client.js 的锚点：
+ * 两者共用同一个模块作用域，所以面板能直接用 settings / updateSettings / displayNameFor。 */
+if (!clientSource.includes(PANEL_ANCHOR)) {
+  throw new Error(`构建失败：src/client.js 里找不到设置页锚点 ${PANEL_ANCHOR}`)
+}
+clientSource = clientSource.replace(PANEL_ANCHOR, () => readSource('src/panel.js').trim())
 
-// 浏览器半边不得有模块解析：dsh.client.inject 是空的，factory 的 require 只服务平台模块。
-const requireCall = /(^|[^.\w])require\s*\(/m.exec(clientSource.replace(/^\s*\/\*[\s\S]*?\*\/\s*/m, ''))
-if (requireCall !== null) {
-  throw new Error('构建失败：src/client.js 里出现了 require() 调用；本插件不依赖平台模块，请去掉它')
+/* 浏览器半边原则上不做模块解析：`dsh.client.inject` 是空的，factory 的 require 只服务
+ * 平台外部模块。设置页需要 React，而 React 正是 DSH 模块加载器提供的平台外部模块
+ * （内置设置页与 dsh-status-rotator / dsh-alert-sound 都这么拿），所以**只放行
+ * require('react')**，别的一律仍然是构建错误。 */
+const REQUIRE_ALLOWED = /^require\s*\(\s*(['"])react\1\s*\)$/
+const requireCalls = [...clientSource.matchAll(/(^|[^.\w])(require\s*\([^)]*\))/gm)].map((match) => match[2].trim())
+const offending = requireCalls.filter((text) => !REQUIRE_ALLOWED.test(text))
+if (offending.length > 0) {
+  throw new Error(`构建失败：src/client.js / src/panel.js 里出现了不允许的 require()：${offending.join('、')}（只允许 require('react')）`)
 }
 
 const wrapped = [
@@ -79,6 +92,7 @@ if (!wrapped.includes(`window.__ModuleLoader__.load({ id: ${JSON.stringify(PLUGI
 if (!wrapped.includes('return module.exports;')) problems.push('bundle 缺少 module.exports 返回')
 if (!wrapped.includes(`data-dsh-inline-pastes`)) problems.push('样式没有注入（锚点替换失败）')
 if (!wrapped.includes(`const VERSION = ${JSON.stringify(MANIFEST.version)}`)) problems.push('版本号没有注入（锚点替换失败）')
+if (!wrapped.includes(`'settings.section'`)) problems.push('设置页没有内联（panel 锚点替换失败）')
 if (!wrapped.includes(`'${PLUGIN_ID}'`) && !wrapped.includes(`"${PLUGIN_ID}"`)) problems.push('host/loader 名字不一致')
 if (problems.length > 0) {
   throw new Error(`构建产物自检失败：\n  - ${problems.join('\n  - ')}`)

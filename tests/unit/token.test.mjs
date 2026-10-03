@@ -16,16 +16,16 @@ function table(...names) {
 }
 
 test('tokenAt 在字符上展开出整段 token', () => {
-  const text = '见 image-1.png 收工'
+  const text = '见 pic-1.png 收工'
   const found = tokenAt(text, text.indexOf('1.png'))
-  assert.equal(found.token, 'image-1.png')
-  assert.equal(text.slice(found.start, found.end), 'image-1.png')
+  assert.equal(found.token, 'pic-1.png')
+  assert.equal(text.slice(found.start, found.end), 'pic-1.png')
 })
 
 test('tokenAt 落在 token 右边界也能命中', () => {
-  const text = '见 image-1.png 收工'
-  const end = text.indexOf('image-1.png') + 'image-1.png'.length
-  assert.equal(tokenAt(text, end).token, 'image-1.png')
+  const text = '见 pic-1.png 收工'
+  const end = text.indexOf('pic-1.png') + 'pic-1.png'.length
+  assert.equal(tokenAt(text, end).token, 'pic-1.png')
 })
 
 test('tokenAt 不在 token 上返回 null', () => {
@@ -34,39 +34,39 @@ test('tokenAt 不在 token 上返回 null', () => {
 })
 
 test('lookupName 命中已知名字', () => {
-  const text = '1、功能1 image-1.png'
-  const found = lookupName(table('image-1.png'), text, text.indexOf('image-1.png') + 3)
-  assert.deepEqual({ ...found }, { token: 'image-1.png', start: text.indexOf('image-1.png'), end: text.length })
+  const text = '1、功能1 pic-1.png'
+  const found = lookupName(table('pic-1.png'), text, text.indexOf('pic-1.png') + 3)
+  assert.deepEqual({ ...found }, { token: 'pic-1.png', start: text.indexOf('pic-1.png'), end: text.length })
 })
 
 test('lookupName 去掉句末句点', () => {
-  const text = '见 image-1.png.'
-  const found = lookupName(table('image-1.png'), text, text.indexOf('1.png'))
-  assert.equal(found.token, 'image-1.png')
-  assert.equal(text.slice(found.start, found.end), 'image-1.png')
+  const text = '见 pic-1.png.'
+  const found = lookupName(table('pic-1.png'), text, text.indexOf('1.png'))
+  assert.equal(found.token, 'pic-1.png')
+  assert.equal(text.slice(found.start, found.end), 'pic-1.png')
 })
 
-test('lookupName 处理左边紧贴数字的写法（功能1image-1.png）', () => {
-  const text = '功能1image-1.png，把它变成可自动定位。'
-  const found = lookupName(table('image-1.png'), text, text.indexOf('image-1.png') + 2)
-  assert.equal(found.token, 'image-1.png')
-  assert.equal(text.slice(found.start, found.end), 'image-1.png')
+test('lookupName 处理左边紧贴数字的写法（功能1pic-1.png）', () => {
+  const text = '功能1pic-1.png，把它变成可自动定位。'
+  const found = lookupName(table('pic-1.png'), text, text.indexOf('pic-1.png') + 2)
+  assert.equal(found.token, 'pic-1.png')
+  assert.equal(text.slice(found.start, found.end), 'pic-1.png')
 })
 
-test('lookupName 处理中文紧贴（见图image-1.png）', () => {
-  const text = '见图image-1.png，收工'
-  const found = lookupName(table('image-1.png'), text, text.indexOf('png'))
-  assert.equal(found.token, 'image-1.png')
+test('lookupName 处理中文紧贴（见图pic-1.png）', () => {
+  const text = '见图pic-1.png，收工'
+  const found = lookupName(table('pic-1.png'), text, text.indexOf('png'))
+  assert.equal(found.token, 'pic-1.png')
 })
 
 test('lookupName 没登记的名字不命中', () => {
-  const text = '见 image-9.png'
-  assert.equal(lookupName(table('image-1.png'), text, text.indexOf('1.png')), null)
+  const text = '见 pic-9.png'
+  assert.equal(lookupName(table('pic-1.png'), text, text.indexOf('1.png')), null)
 })
 
 test('lookupName 不会匹配到窗口外远处的同名文字', () => {
-  const text = `image-1.png${'铺'.repeat(200)}`
-  assert.equal(lookupName(table('image-1.png'), text, 150), null)
+  const text = `pic-1.png${'铺'.repeat(200)}`
+  assert.equal(lookupName(table('pic-1.png'), text, 150), null)
 })
 
 test('体积格式化', () => {

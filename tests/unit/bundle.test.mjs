@@ -37,5 +37,19 @@ test('样式已随构建注入 bundle', async () => {
   assert.match(code, /dsh-ip-card/)
   assert.match(code, /data-dsh-inline-pastes/)
   assert.match(code, /window\.__ModuleLoader__\.load\(\{ id: "@qgynisc\/dsh-inline-pastes"/)
-  assert.equal(/\brequire\s*\(/.test(code.replace(/factory: \(require\) =>/, '')), false, 'bundle 里不应有模块解析调用')
+  assert.equal(/\brequire\s*\(/.test(code.replace(/factory: \(require\) =>/, '')), true, '设置页要从模块加载器拿 React')
+  /* React 是 DSH 模块加载器提供的平台外部模块：只允许 require('react')，别的一律不许。 */
+  const calls = [...code.replace(/factory: \(require\) =>/, '').matchAll(/(^|[^.\w])(require\s*\([^)]*\))/gm)].map((match) => match[2].trim())
+  assert.deepEqual([...new Set(calls)], ["require('react')"], "bundle 里只允许 require('react')")
+})
+
+test('设置页随构建内联进 bundle（锚点替换成功）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const { join, dirname } = await import('node:path')
+  const { fileURLToPath } = await import('node:url')
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+  const code = readFileSync(join(root, 'lib', 'client.js'), 'utf8')
+  assert.match(code, /'settings\.section'/, '设置页槽名要进产物')
+  assert.match(code, /输入框图文混排设置/, '面板标题要进产物')
+  assert.match(code, /Mixed layout/, '英文词库要进产物')
 })
