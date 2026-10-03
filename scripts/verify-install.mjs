@@ -59,7 +59,10 @@ if (SIMULATE) {
       2,
     )}\n`,
   )
-  symlinkSync(ROOT, join(PROFILE_DIR, 'node_modules', PACKAGE_NAME), 'dir')
+  const linkPath = join(PROFILE_DIR, 'node_modules', PACKAGE_NAME)
+  // scoped 包名（@scope/name）的软链目标需要中间目录 @scope/，symlinkSync 不会自动创建
+  mkdirSync(dirname(linkPath), { recursive: true })
+  symlinkSync(ROOT, linkPath, 'dir')
   console.log(`（--simulate）临时 profile：${PROFILE_DIR}\n`)
 }
 
