@@ -1,18 +1,20 @@
-# 打 tag 后自动发布到 npm
+# 打 tag 后自动发布到 npm 并创建 GitHub Release
 #
 # 触发方式（在本地）：
-#   npm version patch   # 会修改 package.json + 打 v0.x.x tag + 自动 commit
+#   npm version patch   # 会修改 package.json + 打 vX.Y.Z tag + 自动 commit
 #   git push --follow-tags
 #
 # 这个动作会：
 #   1. 检出代码；
 #   2. 用 package.json 里的 version 设置 tag（无需手动改）；
 #   3. 跑完整 CI 测试（构建 + 单测 + 安装自检）；
-#   4. 发布到 npm（public access）。
+#   4. 发布到 npm（public access）；
+#   5. 在对应 tag 上自动创建 GitHub Release（含自动生成的变更说明）。
 #
 # 前置条件：
-#   在仓库 Settings → Secrets and variables → Actions 里添加 NPM_TOKEN，
-#   值取 npm Access Token（publish 权限，granular 或 classic 均可）。
+#   1. 仓库 Settings → Secrets and variables → Actions 里添加 NPM_TOKEN，
+#      值取 npm Granular Access Token，且务必勾选 "Bypass two-factor authentication"。
+#   2. npm 已于 2025-12-09 废弃 Classic Token，只能用 Granular Token。
 name: release
 
 on:
@@ -21,11 +23,11 @@ on:
       - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish:
-    name: Publish to npm
+    name: Publish to npm + GitHub Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -46,3 +48,10 @@ jobs:
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
