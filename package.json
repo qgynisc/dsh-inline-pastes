@@ -1,6 +1,6 @@
 {
   "name": "@qgynisc/dsh-inline-pastes",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "把粘贴的图片作为「名字胶囊」插进文字里，悬浮名字即可预览缩略图（DeepSeek Harness Web GUI 客户端插件）",
   "keywords": [
     "deepseek",
@@ -47,6 +47,7 @@
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:ci": "node scripts/build.mjs && node --test tests/unit/*.test.mjs && node scripts/verify-install.mjs --simulate",
     "verify:browser": "node scripts/verify-browser.mjs",
+    "preview:settings": "node scripts/preview-settings.mjs",
     "install:desktop": "node scripts/install.mjs --profile desktop",
     "uninstall:desktop": "node scripts/install.mjs --profile desktop --uninstall"
   },
