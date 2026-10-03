@@ -189,7 +189,15 @@
 
   async function run() {
     const module = window.__pluginModule
-    check('bundle 注册到 __ModuleLoader__ 且 id 正确', module !== undefined && module.id === 'dsh-inline-pastes', module && module.id)
+    /* id 必须等于 package.json 的 name：写死字符串会在包改名（如加 npm scope）后静静过期，
+     * 所以这里现读 package.json（静态服务器就服务仓库根目录）。 */
+    let expectedId = null
+    try {
+      expectedId = (await fetch('/package.json').then((response) => response.json())).name
+    } catch {
+      /* 读不到就只能拿实际 id 报告，断言会失败并显示它 */
+    }
+    check('bundle 注册到 __ModuleLoader__ 且 id 正确', module !== undefined && module.id === expectedId, module && module.id)
     if (module === undefined) return finish()
 
     const mod = module.factory(() => {
