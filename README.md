@@ -5,6 +5,8 @@
 [![license](https://img.shields.io/github/license/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/blob/main/LICENSE)
 [![release](https://img.shields.io/github/v/release/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/releases)
 
+**简体中文** | [English](README.en.md)
+
 给 **DeepSeek Harness Desktop（内置 Web GUI）** 加三件事：
 
 1. **文字中插图** —— 粘贴图片时，在**光标处**插入一个内联胶囊 `[图标] image-1.png`，图片本身仍按官方管线作为附件随本条消息一起发出（模型照样收到图）。
@@ -36,7 +38,7 @@ dsh plugin --profile desktop add git@github.com:qgynisc/dsh-inline-pastes.git
 ```
 
 **卸载**：`npm run uninstall:desktop`，或直接删掉 profile 里 `dsh.profile.bundles` 的
-`dsh-inline-pastes` 一行与 `dependencies` 里的对应条目。
+`@qgynisc/dsh-inline-pastes` 一行与 `dependencies` 里的对应条目。
 
 **验证装好了没**：重启后浏览器控制台里 `__dshInlinePastes.version` 应等于插件版本号。
 
@@ -284,3 +286,11 @@ __dshInlinePastes.forgetSession(id)    // 清掉某会话的计数（下次从 i
 - 粘贴后没有胶囊：把 `CONFIG.interceptPaste` 临时设成 `false` 对比一次——如果关掉后官方行为正常，
   说明是接管条件没过（多半是没打开会话，或剪贴板里混了非图片文件）。
 - 预览卡不出现：悬浮要停在**名字本体**上（胶囊或文字），且该名字必须是本次页面生命周期内粘贴的。
+- 设置 → 插件里的卡片**只显示 `dsh-inline-pastes`、少了 `@qgynisc`，也没有描述/图标**：
+  这个包在 0.5.0 之前叫 `dsh-inline-pastes`（没有 npm scope），那时候装进 profile 的键就是不带
+  scope 的。DSH 是按 **profile 清单里的键名**去解析插件元数据的（`<键名>/package.json`），
+  键名与包名不一致时拿不到 `title` / `description` / `icon`，卡片只能回退显示那个键名
+  （注意行 `inline-pastes` 的 module name 一直是带 scope 的，只有「包」这一层会掉）。
+  重跑 `npm run install:desktop` 即可：新版 `scripts/install.mjs` 会把旧键从 `dependencies` 与
+  `dsh.profile.bundles` 迁到 `@qgynisc/dsh-inline-pastes`，并清掉 `node_modules/` 里残留的旧软链，
+  之后**重启** DeepSeek Harness 卡片就带上 scope 了。
