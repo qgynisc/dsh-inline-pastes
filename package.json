@@ -1,6 +1,6 @@
 {
   "name": "@qgynisc/dsh-inline-pastes",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "把粘贴的图片作为「名字胶囊」插进文字里，悬浮名字即可预览缩略图（DeepSeek Harness Web GUI 客户端插件）",
   "keywords": [
     "deepseek",
@@ -37,6 +37,7 @@
     "cordis.patch.yml",
     "dsh.plugin.json",
     "README.md",
+    "README.en.md",
     "docs",
     "LICENSE"
   ],
