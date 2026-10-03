@@ -1,7 +1,6 @@
 {
-  "name": "dsh-inline-pastes",
+  "name": "@qgynisc/dsh-inline-pastes",
   "version": "0.5.0",
-  "private": true,
   "description": "把粘贴的图片作为「名字胶囊」插进文字里，悬浮名字即可预览缩略图（DeepSeek Harness Web GUI 客户端插件）",
   "keywords": [
     "deepseek",
@@ -21,6 +20,9 @@
   "homepage": "https://github.com/qgynisc/dsh-inline-pastes#readme",
   "bugs": {
     "url": "https://github.com/qgynisc/dsh-inline-pastes/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "type": "module",
   "main": "lib/index.js",
