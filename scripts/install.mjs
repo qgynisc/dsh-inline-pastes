@@ -3,9 +3,12 @@
  *
  * 做的事（每一步都可回滚）：
  *   1. 备份 profile 的 package.json / pnpm-lock.yaml（带时间戳）；
- *   2. dependencies 里加 `"dsh-inline-pastes": "link:<本仓库>"`；
- *   3. dsh.profile.bundles 里追加 `"dsh-inline-pastes"`（bundle 的 cordis.patch.yml
+ *   2. dependencies 里加 `"@qgynisc/dsh-inline-pastes": "link:<本仓库>"`；
+ *   3. dsh.profile.bundles 里追加 `"@qgynisc/dsh-inline-pastes"`（bundle 的 cordis.patch.yml
  *      由 DSH 自动应用，profile 的 cordis.patch.yml 不用改）；
+ *   3b. 清掉加 scope 之前用过的旧键（见 LEGACY_NAMES）：留着会出现
+ *       「插件卡片只显示 dsh-inline-pastes、没有 @qgynisc、也没有描述/图标」的旧卡片
+ *       ——DSH 按 profile 里的键名（不是包自己的 name）查插件元数据；
  *   4. 在 profile 目录跑 pnpm install（先 --offline，失败再联网）；
  *   5. 自检 node_modules 里的链接与包清单。
  *
@@ -15,7 +18,7 @@
  *   DSH_HOME=~/.dsh node scripts/install.mjs --profile web
  */
 import { spawnSync } from 'node:child_process'
-import { copyFileSync, existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -23,6 +26,14 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(join(dirname(fileURLToPath(import.meta.url)), '..'))
 const MANIFEST = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const PACKAGE_NAME = MANIFEST.name
+
+/**
+ * 本包在加 npm scope 之前用过的安装键（老 profile 里可能还留着）。
+ * 例如 "@qgynisc/dsh-inline-pastes" → ["dsh-inline-pastes"]。
+ * DSH 是按 profile 里的键名去解析插件元数据的：键名与包名不一致时，
+ * 插件卡片拿不到 title/description/icon，只能回退显示那个（不带 scope 的）键名。
+ */
+const LEGACY_NAMES = PACKAGE_NAME.startsWith('@') ? [PACKAGE_NAME.slice(PACKAGE_NAME.indexOf('/') + 1)] : []
 
 const args = process.argv.slice(2)
 const profileIndex = args.indexOf('--profile')
@@ -65,12 +76,32 @@ manifest.dsh.profile.bundles = Array.isArray(manifest.dsh.profile.bundles) ? man
 const alreadyListed = manifest.dsh.profile.bundles.includes(PACKAGE_NAME)
 const alreadyLinked = typeof manifest.dependencies[PACKAGE_NAME] === 'string'
 
+/** 清掉旧的无 scope 键（依赖 + bundle 列表），返回真正动过的键名。 */
+const migrateLegacy = () => {
+  const touched = []
+  for (const legacy of LEGACY_NAMES) {
+    let hit = false
+    if (Object.hasOwn(manifest.dependencies, legacy)) {
+      delete manifest.dependencies[legacy]
+      hit = true
+    }
+    if (manifest.dsh.profile.bundles.includes(legacy)) {
+      manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name) => name !== legacy)
+      hit = true
+    }
+    if (hit) touched.push(legacy)
+  }
+  return touched
+}
+
 if (UNINSTALL) {
   delete manifest.dependencies[PACKAGE_NAME]
   manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter((name) => name !== PACKAGE_NAME)
+  for (const legacy of migrateLegacy()) console.log(`  旧键 ${legacy}：已移除`)
 } else {
   manifest.dependencies[PACKAGE_NAME] = `link:${ROOT}`
   if (!alreadyListed) manifest.dsh.profile.bundles.push(PACKAGE_NAME)
+  for (const legacy of migrateLegacy()) console.log(`  旧键 ${legacy} 已迁移到 ${PACKAGE_NAME}`)
 }
 
 const backups = [backup(PROFILE_MANIFEST), backup(PROFILE_LOCK)].filter(Boolean)
@@ -101,6 +132,20 @@ if (outcome.status !== 0) {
   process.exit(outcome.status ?? 1)
 }
 
+/* ---- 清掉 pnpm 没有回收的旧键软链（pnpm 会留下已不在依赖里的 link 软链） ---- */
+for (const legacy of LEGACY_NAMES) {
+  const stale = join(PROFILE_DIR, 'node_modules', legacy)
+  let stat
+  try {
+    stat = lstatSync(stale)
+  } catch {
+    continue
+  }
+  if (!stat.isSymbolicLink()) continue // 只在确认是软链时删：绝不碰真实目录
+  rmSync(stale, { force: true })
+  console.log(`  旧软链 node_modules/${legacy}：已清理`)
+}
+
 /* ---- 自检 ---- */
 const link = join(PROFILE_DIR, 'node_modules', PACKAGE_NAME)
 const problems = []
@@ -116,6 +161,14 @@ if (!UNINSTALL) {
   if (!existsSync(join(ROOT, 'lib', 'client.js'))) problems.push('lib/client.js 还没构建（先跑 npm run build）')
   const host = JSON.parse(readFileSync(PROFILE_MANIFEST, 'utf8'))
   if (!host.dsh.profile.bundles.includes(PACKAGE_NAME)) problems.push('bundles 列表里没有本插件')
+  for (const legacy of LEGACY_NAMES) {
+    if (host.dsh.profile.bundles.includes(legacy) || Object.hasOwn(host.dependencies ?? {}, legacy)) {
+      problems.push(`profile 里还留着旧键 ${legacy}（会让插件卡片显示成不带 scope 的名字）`)
+    }
+    if (existsSync(join(PROFILE_DIR, 'node_modules', legacy))) {
+      problems.push(`node_modules/${legacy} 旧软链还在（本包现在以 ${PACKAGE_NAME} 解析）`)
+    }
+  }
 }
 
 if (problems.length > 0) {
