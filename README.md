@@ -1,5 +1,6 @@
 # dsh-inline-pastes
 
+[![npm](https://img.shields.io/npm/v/@qgynisc/dsh-inline-pastes)](https://www.npmjs.com/package/@qgynisc/dsh-inline-pastes)
 [![test](https://github.com/qgynisc/dsh-inline-pastes/actions/workflows/test.yml/badge.svg)](https://github.com/qgynisc/dsh-inline-pastes/actions/workflows/test.yml)
 [![license](https://img.shields.io/github/license/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/blob/main/LICENSE)
 [![release](https://img.shields.io/github/v/release/qgynisc/dsh-inline-pastes)](https://github.com/qgynisc/dsh-inline-pastes/releases)

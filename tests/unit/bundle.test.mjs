@@ -9,7 +9,7 @@ import { loadBundle } from '../helpers/bundle.mjs'
 
 test('bundle 注册 id 等于包名', () => {
   const { id, mod } = loadBundle()
-  assert.equal(id, 'dsh-inline-pastes')
+  assert.equal(id, '@qgynisc/dsh-inline-pastes')
   assert.equal(typeof mod.apply, 'function')
   assert.deepEqual([...mod.inject], ['conversation', 'sessions'])
   assert.equal(typeof mod.__test, 'object')
@@ -36,6 +36,6 @@ test('样式已随构建注入 bundle', async () => {
   const code = readFileSync(join(root, 'lib', 'client.js'), 'utf8')
   assert.match(code, /dsh-ip-card/)
   assert.match(code, /data-dsh-inline-pastes/)
-  assert.match(code, /window\.__ModuleLoader__\.load\(\{ id: "dsh-inline-pastes"/)
+  assert.match(code, /window\.__ModuleLoader__\.load\(\{ id: "@qgynisc\/dsh-inline-pastes"/)
   assert.equal(/\brequire\s*\(/.test(code.replace(/factory: \(require\) =>/, '')), false, 'bundle 里不应有模块解析调用')
 })

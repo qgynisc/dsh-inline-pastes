@@ -1,0 +1,48 @@
+# 打 tag 后自动发布到 npm
+#
+# 触发方式（在本地）：
+#   npm version patch   # 会修改 package.json + 打 v0.x.x tag + 自动 commit
+#   git push --follow-tags
+#
+# 这个动作会：
+#   1. 检出代码；
+#   2. 用 package.json 里的 version 设置 tag（无需手动改）；
+#   3. 跑完整 CI 测试（构建 + 单测 + 安装自检）；
+#   4. 发布到 npm（public access）。
+#
+# 前置条件：
+#   在仓库 Settings → Secrets and variables → Actions 里添加 NPM_TOKEN，
+#   值取 npm Access Token（publish 权限，granular 或 classic 均可）。
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 构建 + 单测 + 安装自检
+        run: npm run test:ci
+
+      - name: 发布到 npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

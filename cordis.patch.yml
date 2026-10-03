@@ -8,4 +8,4 @@
 # lib/client.js，无需在这里额外注册。
 - insert:
     - id: inline-pastes
-      name: 'dsh-inline-pastes'
+      name: '@qgynisc/dsh-inline-pastes'
