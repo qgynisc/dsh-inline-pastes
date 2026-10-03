@@ -64,5 +64,6 @@
   "license": "MIT",
   "engines": {
     "node": ">=20"
-  }
+  },
+  "tag-version-prefix": "v"
 }
